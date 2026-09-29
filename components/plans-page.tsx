@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useAppLanguage } from "@/components/language-provider";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
+import { LEGAL } from "@/lib/legal-config";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +188,18 @@ export function PlansPage() {
                     <span className="text-4xl font-bold">{plans.free}</span>
                   )}
                 </div>
+
+                {/* The charge is in pesos and the store cannot be denominated in
+                    anything else, but half the people who might pay for this do
+                    not price in pesos. The reference is a second signal, not a
+                    second offer: both figures come from LEGAL.prices and
+                    PLAN_PRICES_ARS, which tests/pricing.test.ts holds together,
+                    so the two can never quote different plans. */}
+                {plan.price && plan.id !== "free" ? (
+                  <p className="mt-1 text-xs text-muted-foreground/80">
+                    ≈ US${LEGAL.prices[plan.id as "plus" | "pro"]}
+                  </p>
+                ) : null}
 
                 {plan.trial ? (
                   <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
