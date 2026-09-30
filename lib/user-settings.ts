@@ -90,3 +90,19 @@ export async function saveAvailabilitySettings(
           updated_at = NOW()
   `;
 }
+
+/** Último día (en la zona del usuario) en que se replanificaron sus proyectos, o null. */
+export async function getProjectsReplannedOn(userId: string): Promise<string | null> {
+  const rows = await sql`
+    SELECT projects_replanned_on::text AS day FROM user_settings WHERE user_id = ${userId}
+  `;
+  return (rows[0]?.day as string | undefined) ?? null;
+}
+
+export async function markProjectsReplanned(userId: string, today: string): Promise<void> {
+  await sql`
+    INSERT INTO user_settings (user_id, projects_replanned_on)
+    VALUES (${userId}, ${today}::date)
+    ON CONFLICT (user_id) DO UPDATE SET projects_replanned_on = EXCLUDED.projects_replanned_on
+  `;
+}

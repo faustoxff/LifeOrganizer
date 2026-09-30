@@ -119,22 +119,21 @@ export function parseIntake(raw: string): ParseResult<Intake> {
 // ---------------------------------------------------------------------------
 
 /**
- * Valida las subtareas que propone la IA: JSON, cantidad, títulos, estimaciones de
+ * Valida una lista de subtareas: cantidad dentro de `bounds`, títulos, estimaciones de
  * 10 a 240 min, ids únicos, dependencias que existan y un DAG sin ciclos. Junta todos
  * los problemas (no solo el primero) para que el reintento los arregle de una vez.
+ *
+ * La usan la IA (4 a 25) y el usuario cuando edita el borrador (1 a 25: puede recortar
+ * alcance hasta que entre).
  */
-export function parsePlan(raw: string): ParseResult<PlannedSubtask[]> {
-  const json = extractJsonObject(raw);
-  if (!json) return { ok: false, error: "The reply is not a valid JSON object." };
-  if (!Array.isArray(json.subtasks)) {
-    return { ok: false, error: '"subtasks" must be an array.' };
-  }
-
+export function validateSubtaskList(
+  list: unknown[],
+  bounds: { min: number; max: number } = { min: MIN_SUBTASKS, max: MAX_SUBTASKS }
+): ParseResult<PlannedSubtask[]> {
   const problems: string[] = [];
-  const list = json.subtasks;
 
-  if (list.length < MIN_SUBTASKS || list.length > MAX_SUBTASKS) {
-    problems.push(`Expected between ${MIN_SUBTASKS} and ${MAX_SUBTASKS} subtasks, got ${list.length}.`);
+  if (list.length < bounds.min || list.length > bounds.max) {
+    problems.push(`Expected between ${bounds.min} and ${bounds.max} subtasks, got ${list.length}.`);
   }
 
   const subtasks: PlannedSubtask[] = [];
@@ -198,6 +197,16 @@ export function parsePlan(raw: string): ParseResult<PlannedSubtask[]> {
     warnings.push(`No subtask can be started today in ${FIRST_SUBTASK_MAX_MIN} minutes or less.`);
   }
   return { ok: true, value: subtasks, warnings };
+}
+
+/** Lo que devuelve la IA al dividir un proyecto: `{ "subtasks": [...] }`, con las reglas de la IA. */
+export function parsePlan(raw: string): ParseResult<PlannedSubtask[]> {
+  const json = extractJsonObject(raw);
+  if (!json) return { ok: false, error: "The reply is not a valid JSON object." };
+  if (!Array.isArray(json.subtasks)) {
+    return { ok: false, error: '"subtasks" must be an array.' };
+  }
+  return validateSubtaskList(json.subtasks);
 }
 
 /** Un identificador de subtarea seguro para guardar y devolver. */
