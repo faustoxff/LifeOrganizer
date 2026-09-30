@@ -42,6 +42,7 @@ vi.mock("@/lib/projects-service", async (original) => ({
   applySubtaskAction: mocks.applySubtaskAction
 }));
 vi.mock("@/lib/storage", () => ({ countUserTasks: mocks.countUserTasks }));
+vi.mock("@/lib/replan", () => ({ ensureDailyReplan: async () => ({ ran: false, moved: [], conflicts: [] }), replanAll: async () => ({ ran: true, moved: [], conflicts: [] }) }));
 vi.mock("@/lib/user-settings", () => ({
   resolveUserTimeZone: async () => "UTC",
   getAvailabilitySettings: async () => ({ availability: DEFAULT_AVAILABILITY, overrides: {}, configured: true })

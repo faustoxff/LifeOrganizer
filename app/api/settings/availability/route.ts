@@ -1,8 +1,10 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { parseAvailability, parseOverrides } from "@/lib/availability";
+import { replanAll } from "@/lib/replan";
 import { requireAuth } from "@/lib/server-auth";
-import { getAvailabilitySettings, saveAvailabilitySettings } from "@/lib/user-settings";
+import { getTodayInTimeZone } from "@/lib/task-date";
+import { getAvailabilitySettings, resolveUserTimeZone, saveAvailabilitySettings } from "@/lib/user-settings";
 
 const unauthorized = () => NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -41,6 +43,9 @@ export async function PUT(request: Request) {
 
   try {
     await saveAvailabilitySettings(userId, availability, overrides);
+    // Un cambio grande: se vuelve a acomodar todo con la disponibilidad nueva. Es un extra: si falla, se guardó igual.
+    const today = getTodayInTimeZone(await resolveUserTimeZone(userId));
+    await replanAll(userId, today, { force: true }).catch((error) => console.error("replan after availability failed", error));
     return NextResponse.json({ availability, overrides, configured: true });
   } catch (err) {
     console.error("saveAvailabilitySettings failed", err);

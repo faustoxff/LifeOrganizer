@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { parseDraftBody } from "@/lib/project-input";
 import { authenticate, badRequest, isPaid, planRequired, readBody, todayFor } from "@/lib/project-route";
 import { addDailyMinutes, createFromDraft, listProjects, moveDeadline, ProjectLimitError } from "@/lib/projects-service";
+import { ensureDailyReplan } from "@/lib/replan";
 import { isDateKey } from "@/lib/recurrence";
 import { SchedulerError } from "@/lib/scheduler";
 import { getUserPlan } from "@/lib/server-auth";
@@ -19,6 +20,8 @@ export async function GET(request: Request) {
 
   try {
     const today = await todayFor(userId, new URL(request.url).searchParams.get("tz"));
+    // Una vez por día, para todo (tareas y proyectos). Un fallo acá no debe impedir ver los proyectos.
+    await ensureDailyReplan(userId, today).catch((error) => console.error("ensureDailyReplan failed", error));
     return NextResponse.json({ projects: await listProjects(userId, today) });
   } catch (error) {
     console.error("listProjects failed", error);

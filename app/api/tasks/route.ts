@@ -7,6 +7,7 @@ import {
   updateTask,
   setTaskDone,
   addTaskProgress,
+  setTaskPinned,
   deleteTaskById,
   countUserTasks,
   countUserLooseTasks
@@ -26,6 +27,7 @@ import {
   type FollowingResult,
   type OccurrenceChanges
 } from "@/lib/series";
+import { ensureDailyReplan } from "@/lib/replan";
 import { checklistStore } from "@/lib/checklists-runtime";
 import { learnFromCompletion } from "@/lib/checklists-service";
 import { ruleFromRepeat } from "@/lib/recurrence";
@@ -61,6 +63,8 @@ export async function GET(request: Request) {
     const today = getTodayInTimeZone(timeZone);
 
     await ensureOccurrences(userId, today);
+    // Una vez por día: reacomoda lo atrasado (tareas y proyectos). Es un extra: si falla, las tareas se cargan igual.
+    await ensureDailyReplan(userId, today).catch((error) => console.error("ensureDailyReplan failed", error));
     const tasks = await loadTasks(userId);
     return NextResponse.json({ tasks, today, timeZone });
   } catch (err) {
@@ -199,9 +203,21 @@ export async function PATCH(request: Request) {
   try { userId = await requireAuth(); }
   catch { return unauthorized(); }
 
-  const body = (await request.json()) as { taskId?: string; done?: boolean; actualMin?: unknown; progressMin?: unknown };
+  const body = (await request.json()) as { taskId?: string; done?: boolean; actualMin?: unknown; progressMin?: unknown; pinned?: unknown };
   if (typeof body.taskId !== "string") {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  // Fijar / soltar: una tarea fijada no se mueve nunca en la replanificación.
+  if (body.done === undefined && body.progressMin === undefined && body.pinned !== undefined) {
+    if (typeof body.pinned !== "boolean") return NextResponse.json({ error: "Invalid pinned" }, { status: 400 });
+    try {
+      const task = await setTaskPinned(body.taskId, body.pinned, userId);
+      return task ? NextResponse.json({ task }) : NextResponse.json({ error: "Task not found" }, { status: 404 });
+    } catch (err) {
+      console.error("setTaskPinned failed", err);
+      return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
+    }
   }
   const minutes = (value: unknown): number | null | "invalid" => {
     if (value === undefined || value === null) return null;

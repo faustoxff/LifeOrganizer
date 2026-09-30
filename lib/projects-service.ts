@@ -19,8 +19,6 @@ import type { ReplanOutput, Session } from "@/lib/scheduler";
 import { loadTasks } from "@/lib/storage";
 import {
   getAvailabilitySettings,
-  getProjectsReplannedOn,
-  markProjectsReplanned,
   saveAvailabilitySettings
 } from "@/lib/user-settings";
 import type { ProjectDraftPlan, ProjectSession, ProjectView } from "@/types/project";
@@ -151,17 +149,16 @@ async function replanAndPersist(userId: string, today: string): Promise<{ state:
   return { state, result };
 }
 
-/** Una vez por día por usuario. Idempotente: el plan es estable, así que repetirlo no mueve nada. */
-export async function ensureDailyReplan(userId: string, today: string): Promise<boolean> {
-  if ((await getProjectsReplannedOn(userId)) === today) return false;
+/**
+ * Replanifica los proyectos del usuario y guarda. Es la parte de proyectos de `replanAll` (lib/replan.ts), que
+ * decide cuándo correrla (una vez por día, o tras un cambio grande). Idempotente: el plan es estable.
+ */
+export async function replanProjects(userId: string, today: string): Promise<void> {
   await replanAndPersist(userId, today);
-  await markProjectsReplanned(userId, today);
-  return true;
 }
 
 /** Los proyectos del usuario con su agenda y cómo viene el plan. */
 export async function listProjects(userId: string, today: string): Promise<ProjectView[]> {
-  await ensureDailyReplan(userId, today);
   const state = await loadState(userId, today);
   return toViews(state, planState(state, today));
 }

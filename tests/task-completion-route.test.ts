@@ -18,11 +18,13 @@ vi.mock("@/lib/storage", () => ({
   loadTasks: vi.fn(), createTask: vi.fn(), updateTask: vi.fn(), deleteTaskById: vi.fn(),
   countUserTasks: vi.fn(), countUserLooseTasks: vi.fn(),
   setTaskDone: mocks.setTaskDone,
-  addTaskProgress: mocks.addTaskProgress
+  addTaskProgress: mocks.addTaskProgress,
+  setTaskPinned: vi.fn()
 }));
 vi.mock("@/lib/series-storage", () => ({
   countActiveSeries: vi.fn(), ensureOccurrences: vi.fn(), insertSeries: vi.fn(), loadSeriesOccurrences: vi.fn(), seriesStore: {}
 }));
+vi.mock("@/lib/replan", () => ({ ensureDailyReplan: async () => ({ ran: false, moved: [], conflicts: [] }) }));
 vi.mock("@/lib/checklists-runtime", () => ({ checklistStore: {} }));
 vi.mock("@/lib/checklists-service", () => ({ learnFromCompletion: mocks.learnFromCompletion }));
 vi.mock("@/lib/user-settings", () => ({ resolveUserTimeZone: mocks.resolveUserTimeZone }));
