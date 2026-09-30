@@ -1,11 +1,11 @@
 import "server-only";
 import { addExtraMinutes, draftProject, planProjects, progressOf, schedulerProjectFrom, sessionFromRecord, unprefixDraftSessions, DRAFT_PROJECT_ID } from "@/lib/project-scheduling";
-import { learnInflation } from "@/lib/estimate-learning";
+import { inflationFor, type UserPatterns } from "@/lib/user-patterns";
+import { patternsLoader } from "@/lib/user-history";
 import { MAX_ACTIVE_PROJECTS, tomorrowOf, type DraftBody } from "@/lib/project-input";
 import {
   applySubtaskPatch,
   createProject,
-  loadEstimateHistory,
   loadProjectRecords,
   replaceSessions,
   setProjectDeadline,
@@ -42,25 +42,29 @@ type State = {
   availability: Availability;
   overrides: AvailabilityOverrides;
   tasks: Task[];
-  inflation: number;
+  /** Lo aprendido del usuario: de ahí sale el factor de cada categoría. */
+  patterns: UserPatterns;
   records: ProjectRecord[];
 };
 
 async function loadState(userId: string): Promise<State> {
-  const [settings, tasks, history, records] = await Promise.all([
+  const [settings, tasks, patterns, records] = await Promise.all([
     getAvailabilitySettings(userId),
     loadTasks(userId),
-    loadEstimateHistory(userId),
+    patternsLoader(userId)(),
     loadProjectRecords(userId)
   ]);
   return {
     availability: settings.availability,
     overrides: settings.overrides,
     tasks,
-    inflation: learnInflation(history).factor,
+    patterns,
     records
   };
 }
+
+/** El factor de una categoría: el suyo si lo aprendió, si no el global, si no el default (1.3). */
+const inflationOf = (state: Pick<State, "patterns">, category: string) => inflationFor(state.patterns.inflation, category).factor;
 
 /** Un proyecto sigue en juego mientras no esté terminado y le quede algo por hacer. */
 const isActive = (record: ProjectRecord) => !record.task.done && record.subtasks.some((s) => !s.done);
@@ -73,9 +77,9 @@ function planState(state: State, today: string, extra: ReturnType<typeof draftPr
     availability: boosted?.availability ?? state.availability,
     overrides: boosted?.overrides ?? state.overrides,
     tasks: state.tasks,
-    projects: [...active.map((r) => schedulerProjectFrom(r.task, r.subtasks)), ...extra],
+    projects: [...active.map((r) => schedulerProjectFrom(r.task, r.subtasks, inflationOf(state, r.task.category))), ...extra],
     previousSessions: active.flatMap((r) => r.sessions.map(sessionFromRecord)),
-    inflation: state.inflation
+    inflation: inflationOf(state, "general")
   });
 }
 
@@ -160,13 +164,13 @@ export async function previewDraft(
   draft: Pick<DraftBody, "deadline" | "dailyCapMin" | "subtasks" | "extraMinPerDay">
 ): Promise<ProjectDraftPlan> {
   const state = await loadState(userId);
-  const result = planState(state, today, [draftProject(draft.deadline, draft.dailyCapMin, draft.subtasks)], draft.extraMinPerDay);
+  const result = planState(state, today, [draftProject(draft.deadline, draft.dailyCapMin, draft.subtasks, inflationOf(state, "general"))], draft.extraMinPerDay);
   return {
     subtasks: draft.subtasks,
     sessions: unprefixDraftSessions(result.sessions),
     plan: result.perProject[DRAFT_PROJECT_ID],
     warnings: result.warnings.filter((w) => w.projectId === DRAFT_PROJECT_ID || w.projectId === undefined),
-    inflation: state.inflation
+    inflation: inflationOf(state, "general")
   };
 }
 
@@ -224,10 +228,16 @@ export async function applySubtaskAction(
   userId: string,
   today: string,
   subtaskId: string,
-  action: { action: "complete"; actualMin: number | null } | { action: "progress"; minutes: number } | { action: "skip" }
+  action: { action: "complete"; actualMin: number | null } | { action: "progress"; minutes: number } | { action: "skip" },
+  /** Hora local (0-23) del usuario ahora: se guarda al completar. */
+  localHour: number | null = null
 ): Promise<{ views: ProjectView[]; projectDone: boolean } | null> {
   const patch: SubtaskPatch =
-    action.action === "skip" ? { action: "skip", notBefore: tomorrowOf(today) } : action;
+    action.action === "skip"
+      ? { action: "skip", notBefore: tomorrowOf(today) }
+      : action.action === "complete"
+        ? { ...action, completedHour: localHour }
+        : action;
   const applied = await applySubtaskPatch(userId, subtaskId, patch);
   if (!applied) return null;
 

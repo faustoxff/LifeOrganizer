@@ -253,9 +253,9 @@ describe("subtareas y ajustes", () => {
     expect((await send({ subtaskId: "s", action: "complete", actualMin: "45" })).status).toBe(400);
     expect((await send({ subtaskId: "s", action: "progress" })).status).toBe(400);
     expect((await send({ subtaskId: "s", action: "complete" })).status).toBe(200);
-    expect(mocks.applySubtaskAction).toHaveBeenLastCalledWith("u1", expect.any(String), "s", { action: "complete", actualMin: null });
+    expect(mocks.applySubtaskAction).toHaveBeenLastCalledWith("u1", expect.any(String), "s", { action: "complete", actualMin: null }, expect.any(Number));
     expect((await send({ subtaskId: "s", action: "complete", actualMin: 45 })).status).toBe(200);
-    expect(mocks.applySubtaskAction).toHaveBeenLastCalledWith("u1", expect.any(String), "s", { action: "complete", actualMin: 45 });
+    expect(mocks.applySubtaskAction).toHaveBeenLastCalledWith("u1", expect.any(String), "s", { action: "complete", actualMin: 45 }, expect.any(Number));
   });
 
   it("una subtarea que no es del usuario responde 404", async () => {

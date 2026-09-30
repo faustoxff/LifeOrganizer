@@ -1,7 +1,6 @@
 import "server-only";
 import sql from "@/lib/db";
 import type { Completion } from "@/lib/ai/types";
-import type { EstimateSample } from "@/lib/estimate-learning";
 import type { Session } from "@/lib/scheduler";
 import { normalizeTask } from "@/lib/storage";
 import type { ProjectSession, ProjectSubtask } from "@/types/project";
@@ -213,7 +212,7 @@ export async function setProjectDeadline(userId: string, projectId: string, dead
 }
 
 export type SubtaskPatch =
-  | { action: "complete"; actualMin: number | null }
+  | { action: "complete"; actualMin: number | null; /** Hora local (0-23) del usuario al completar. */ completedHour?: number | null }
   | { action: "progress"; minutes: number }
   | { action: "skip"; notBefore: string };
 
@@ -228,6 +227,7 @@ export async function applySubtaskPatch(
     rows = await sql`
       UPDATE subtasks
       SET done = TRUE, done_at = NOW(),
+          completed_hour = ${patch.completedHour ?? null}::smallint,
           actual_min = CASE WHEN ${patch.actualMin}::int IS NULL THEN actual_min
                             ELSE COALESCE(actual_min, 0) + ${patch.actualMin}::int END
       WHERE id = ${subtaskId} AND user_id = ${userId}
@@ -243,7 +243,10 @@ export async function applySubtaskPatch(
   } else {
     rows = await sql`
       UPDATE subtasks
-      SET not_before = ${patch.notBefore}::date
+      SET not_before = ${patch.notBefore}::date,
+          -- saltear es mover a un día posterior; saltear dos veces el mismo día no suma dos
+          postponed_count = postponed_count
+            + CASE WHEN not_before IS NULL OR ${patch.notBefore}::date > not_before THEN 1 ELSE 0 END
       WHERE id = ${subtaskId} AND user_id = ${userId} AND done = FALSE
       RETURNING project_id
     `;
@@ -268,18 +271,6 @@ export async function applySubtaskPatch(
     }
   }
   return { projectId, projectDone };
-}
-
-/** Estimado vs. real de las subtareas hechas: de acá sale el factor de inflación del usuario. */
-export async function loadEstimateHistory(userId: string): Promise<EstimateSample[]> {
-  const rows = await sql`
-    SELECT estimate_min, actual_min FROM subtasks
-    WHERE user_id = ${userId} AND done = TRUE AND actual_min IS NOT NULL AND actual_min > 0
-      AND estimate_min IS NOT NULL
-    ORDER BY done_at DESC NULLS LAST
-    LIMIT 200
-  `;
-  return rows.map((r) => ({ estimateMin: Number(r.estimate_min), actualMin: Number(r.actual_min) }));
 }
 
 /**

@@ -39,6 +39,8 @@ export type SchedulerProject = {
   deadline: string;
   /** Tope diario propio del proyecto. Sin valor = sin tope propio. */
   dailyCapMin?: number | null;
+  /** Factor propio de este proyecto (el de su categoría). Sin valor, el de `params`. */
+  inflation?: number;
   subtasks: SchedulerSubtask[];
 };
 
@@ -342,7 +344,9 @@ function buildModel(input: ScheduleInput, change?: { extraPerDay?: number; deadl
   const indexById = new Map<string, number>();
   projects.forEach((project, projectIdx) => {
     for (const subtask of project.subtasks) {
-      const effective = effectiveMinutes(subtask.estimateMin, params.inflation);
+      const projectInflation =
+        Number.isFinite(project.inflation) && (project.inflation as number) > 0 ? (project.inflation as number) : params.inflation;
+      const effective = effectiveMinutes(subtask.estimateMin, projectInflation);
       const worked = Math.max(0, subtask.actualMin ?? 0);
       indexById.set(subtask.id, nodes.length);
       nodes.push({

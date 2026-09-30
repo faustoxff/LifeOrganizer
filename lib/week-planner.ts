@@ -1,3 +1,4 @@
+import { normalizeCategory } from "@/lib/user-patterns";
 import { capacityOn, type Availability, type AvailabilityOverrides } from "@/lib/availability";
 import { addDays, isDateKey, occurrencesBetween, ruleFromRepeat } from "@/lib/recurrence";
 import { effectiveMinutes } from "@/lib/scheduler";
@@ -51,6 +52,8 @@ export type WeekPlanInput = {
   items: readonly WeekItem[];
   /** Factor de la duración de los ítems nuevos. 1 = usar la estimación tal cual. */
   inflation?: number;
+  /** Factor propio de las categorías que el usuario ya midió. Manda sobre `inflation`. */
+  inflationByCategory?: Readonly<Record<string, number>>;
 };
 
 export type ReasonCode =
@@ -166,7 +169,9 @@ function biggest(day: DayState): string | undefined {
 export function planWeek(input: WeekPlanInput): WeekPlan {
   const { today, weekStart, availability, overrides = {}, items } = input;
   const inflation = input.inflation ?? 1;
-  const minutesOf = (item: WeekItem) => effectiveMinutes(item.estimateMin, inflation);
+  const byCategory = input.inflationByCategory ?? {};
+  const minutesOf = (item: WeekItem) =>
+    effectiveMinutes(item.estimateMin, byCategory[normalizeCategory(item.category)] ?? inflation);
 
   const windowDays: string[] = [];
   for (let offset = 0; offset < WINDOW_DAYS; offset += 1) {

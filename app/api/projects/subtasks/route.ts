@@ -2,6 +2,8 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { authenticate, badRequest, readBody, todayFor } from "@/lib/project-route";
 import { applySubtaskAction } from "@/lib/projects-service";
+import { getHourInTimeZone } from "@/lib/task-date";
+import { resolveUserTimeZone } from "@/lib/user-settings";
 
 // PATCH /api/projects/subtasks — { subtaskId, action, actualMin?, minutes? }
 //   complete: the subtask is done; actualMin (optional) is the time of this last stretch
@@ -39,7 +41,9 @@ export async function PATCH(request: Request) {
 
   try {
     const today = await todayFor(userId, body.tz);
-    const result = await applySubtaskAction(userId, today, body.subtaskId, action);
+    // La hora se lee en la zona del usuario (la que guardó), no en la del servidor.
+    const localHour = action.action === "complete" ? getHourInTimeZone(await resolveUserTimeZone(userId)) : null;
+    const result = await applySubtaskAction(userId, today, body.subtaskId, action, localHour);
     if (!result) return NextResponse.json({ error: "Subtask not found" }, { status: 404 });
     return NextResponse.json({ projects: result.views, projectDone: result.projectDone });
   } catch (error) {

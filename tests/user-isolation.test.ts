@@ -166,6 +166,46 @@ describe("hechos, checklists y ubicación", () => {
   });
 });
 
+describe("patrones del usuario (etapa 6)", () => {
+  it("la ruta de patrones autentica y no toma un userId de la petición", () => {
+    const source = read("app/api/patterns/route.ts");
+    expect(source).toMatch(/requireAuth\s*\(/);
+    expect(source).not.toMatch(/searchParams|request\.json|body\.userId/);
+  });
+
+  it("el historial filtra por user_id en cada consulta, también la de subtareas", () => {
+    const source = read("lib/user-history.ts");
+    const queries = source.match(/sql`[\s\S]*?`/g) ?? [];
+    expect(queries).toHaveLength(2);
+    for (const query of queries) {
+      expect(query, "consulta del historial sin dueño").toMatch(/user_id\s*=\s*\$\{userId\}/);
+    }
+    // El JOIN a tasks no puede cruzar cuentas: también compara el dueño.
+    expect(queries[1]).toMatch(/t\.user_id\s*=\s*s\.user_id/);
+  });
+
+  it("el loader nace con el userId: no hay cache compartido entre usuarios", () => {
+    const source = read("lib/user-history.ts");
+    expect(source).toMatch(/export function patternsLoader\(userId: string/);
+    // Nada a nivel de módulo que guarde resultados de un usuario para otro.
+    expect(source).not.toMatch(/^(const|let) \w*[Cc]ache\b/m);
+    expect(source).not.toMatch(/new Map\(/);
+  });
+
+  it("las escrituras nuevas de tareas y subtareas comparan user_id", () => {
+    for (const [path, fn] of [
+      ["lib/storage.ts", "addTaskProgress"],
+      ["lib/storage.ts", "moveTaskDueDate"],
+      ["lib/storage.ts", "setTaskDone"]
+    ] as const) {
+      const source = read(path);
+      const body = source.slice(source.indexOf(`function ${fn}`));
+      const query = body.match(/sql`[\s\S]*?`/)?.[0] ?? "";
+      expect(query, `${fn} sin dueño`).toMatch(/user_id\s*=\s*\$\{userId\}/);
+    }
+  });
+});
+
 describe("server-side AI caches", () => {
   it("include the user in the cache key", () => {
     // These Maps live in the server process and are shared by every request.

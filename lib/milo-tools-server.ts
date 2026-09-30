@@ -1,8 +1,8 @@
 import "server-only";
-import { learnInflation } from "@/lib/estimate-learning";
 import type { ScheduleData, ToolContext } from "@/lib/milo-tools";
 import { listFacts, saveFact } from "@/lib/facts-storage";
-import { loadEstimateHistory, loadProjectRecords } from "@/lib/projects-storage";
+import { loadProjectRecords } from "@/lib/projects-storage";
+import { patternsLoader } from "@/lib/user-history";
 import { loadTasks } from "@/lib/storage";
 import { getAvailabilitySettings } from "@/lib/user-settings";
 
@@ -14,6 +14,8 @@ import { getAvailabilitySettings } from "@/lib/user-settings";
  */
 export function createToolContext(userId: string, today: string, now: Date, userMessage = ""): ToolContext {
   let cached: Promise<ScheduleData> | null = null;
+  // Una sola lectura del historial por turno, compartida entre `plan_week` y `get_my_patterns`.
+  const patterns = patternsLoader(userId, now);
 
   return {
     today,
@@ -24,19 +26,20 @@ export function createToolContext(userId: string, today: string, now: Date, user
       list: () => listFacts(userId),
       save: (input) => saveFact(userId, input)
     },
+    patterns,
     load() {
-      cached ??= readScheduleData(userId);
+      cached ??= readScheduleData(userId, patterns);
       return cached;
     }
   };
 }
 
-async function readScheduleData(userId: string): Promise<ScheduleData> {
-  const [tasks, records, settings, history] = await Promise.all([
+async function readScheduleData(userId: string, loadPatterns: ReturnType<typeof patternsLoader>): Promise<ScheduleData> {
+  const [tasks, records, settings, patterns] = await Promise.all([
     loadTasks(userId),
     loadProjectRecords(userId),
     getAvailabilitySettings(userId),
-    loadEstimateHistory(userId)
+    loadPatterns()
   ]);
 
   const sessions = records
@@ -53,7 +56,7 @@ async function readScheduleData(userId: string): Promise<ScheduleData> {
         }))
     );
 
-  const learned = learnInflation(history);
+  const { global, categories } = patterns.inflation;
   return {
     tasks,
     sessions,
@@ -61,6 +64,12 @@ async function readScheduleData(userId: string): Promise<ScheduleData> {
     overrides: settings.overrides,
     // Sin historial suficiente el default (1.3) es una suposición: para repartir tareas
     // sueltas se usa la estimación tal cual en vez de inflarlas por un promedio ajeno.
-    inflation: learned.learned ? learned.factor : 1
+    // Una categoría con medición propia manda sobre el global.
+    inflation: global.learned ? global.factor : 1,
+    inflationByCategory: Object.fromEntries(
+      Object.entries(categories)
+        .filter(([, entry]) => entry.source === "category")
+        .map(([category, entry]) => [category, entry.factor])
+    )
   };
 }

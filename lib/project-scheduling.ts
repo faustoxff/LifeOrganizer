@@ -38,12 +38,15 @@ export function computeFixedLoad(tasks: readonly Task[], today: string): Record<
 
 export function schedulerProjectFrom(
   task: Pick<Task, "id" | "dueDate" | "dailyCapMin">,
-  subtasks: readonly ProjectSubtask[]
+  subtasks: readonly ProjectSubtask[],
+  /** El factor de la categoría del proyecto. Sin valor, el del plan. */
+  inflation?: number
 ): SchedulerProject {
   return {
     id: task.id,
     deadline: task.dueDate,
     dailyCapMin: task.dailyCapMin ?? null,
+    ...(inflation !== undefined ? { inflation } : {}),
     subtasks: [...subtasks]
       .sort((a, b) => a.position - b.position)
       .map((s) => ({
@@ -58,11 +61,17 @@ export function schedulerProjectFrom(
 }
 
 /** El proyecto en borrador, con los ids de las subtareas prefijados para no chocar con los reales. */
-export function draftProject(deadline: string, dailyCapMin: number | null, planned: readonly PlannedSubtask[]): SchedulerProject {
+export function draftProject(
+  deadline: string,
+  dailyCapMin: number | null,
+  planned: readonly PlannedSubtask[],
+  inflation?: number
+): SchedulerProject {
   return {
     id: DRAFT_PROJECT_ID,
     deadline,
     dailyCapMin,
+    ...(inflation !== undefined ? { inflation } : {}),
     subtasks: planned.map((s) => ({
       id: `${DRAFT_PREFIX}${s.tempId}`,
       estimateMin: s.estimateMin,

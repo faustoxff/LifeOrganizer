@@ -1,3 +1,4 @@
+import { adjustedEstimate, normalizeCategory, type UserPatterns } from "@/lib/user-patterns";
 import type { Availability, AvailabilityOverrides } from "@/lib/availability";
 import { capacityOn } from "@/lib/availability";
 import type { ToolCall, ToolSpec } from "@/lib/ai/types";
@@ -165,7 +166,20 @@ export const REMEMBER_FACT: ToolSpec = {
   }
 };
 
-export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT];
+export const GET_MY_PATTERNS: ToolSpec = {
+  name: "get_my_patterns",
+  description:
+    "Lo que Spark aprendió de cómo trabaja el usuario: cuánto tarda de verdad respecto de lo que estima (en general y por categoría), en qué franja del día completa más tareas y qué posterga seguido. Usala para contestar \"¿cuánto tardo en estudiar?\" o \"¿cuándo rindo más?\". Los números salen del historial del usuario: no los inventes ni los recalcules.",
+  parameters: {
+    type: "object",
+    properties: {
+      category: { type: "string", description: "Opcional: solo esa categoría (por ejemplo la del tema por el que pregunta)." }
+    },
+    required: []
+  }
+};
+
+export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS];
 
 /** Cuántos hechos puede tocar Milo en un mismo turno: un tope contra un modelo que "recuerda" todo. */
 export const MAX_FACT_CALLS_PER_TURN = 3;
@@ -188,6 +202,8 @@ export type ScheduleData = {
   overrides: AvailabilityOverrides;
   /** Factor para la duración de los ítems nuevos. 1 = sin historial suficiente. */
   inflation: number;
+  /** Factor de las categorías con medición propia. Sin la categoría, se usa `inflation`. */
+  inflationByCategory?: Record<string, number>;
 };
 
 /** Lo que `remember_fact` necesita de la base, atado al usuario autenticado. */
@@ -197,6 +213,8 @@ export type FactsPort = {
 };
 
 export type ToolContext = {
+  /** Los patrones aprendidos del usuario autenticado (`lib/user-patterns.ts`). Se lee solo si se pide. */
+  patterns?: () => Promise<UserPatterns>;
   /** El mensaje del usuario en este turno: `remember_fact` comprueba contra él que lo haya dicho. */
   userMessage?: string;
   facts?: FactsPort;
@@ -457,7 +475,8 @@ function planWeekTool(request: PlanRequest, ctx: ToolContext, data: ScheduleData
     overrides: data.overrides,
     existing: existingEntries(data),
     items,
-    inflation: data.inflation
+    inflation: data.inflation,
+    inflationByCategory: data.inflationByCategory
   });
 
   const proposal = toProposal(plan);
@@ -629,8 +648,57 @@ async function rememberFact(args: Record<string, unknown>, ctx: ToolContext): Pr
   return ok({ saved: true, note: "Guardado. Podés decirle que lo tenés en cuenta." }, { factSaved: { key: check.key, value: check.value } });
 }
 
+const PATTERN_LIST_MAX = 5;
+
+/**
+ * Devuelve los patrones ya calculados. La IA solo los redacta: cada número sale de
+ * `lib/user-patterns.ts`, y lo que todavía no se aprendió se dice como tal ("faltan N").
+ */
+async function getMyPatterns(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!ctx.patterns) return fail("No hay patrones disponibles.");
+  const wanted = typeof args.category === "string" && args.category.trim() ? normalizeCategory(args.category) : null;
+  const patterns = await ctx.patterns();
+  const { inflation, hours, postponers } = patterns;
+
+  const describe = (category: string, entry: (typeof inflation.categories)[string]) => ({
+    category,
+    factor: entry.factor,
+    samples: entry.samples,
+    learned: entry.learned,
+    source: entry.source,
+    // 30 minutos estimados, cuánto suele llevarle de verdad (para que no haya que hacer la cuenta).
+    minutesFor30Estimated: adjustedEstimate(30, entry.factor)
+  });
+  const categories = Object.entries(inflation.categories)
+    .filter(([category]) => !wanted || category === wanted)
+    .map(([category, entry]) => describe(category, entry));
+
+  return ok({
+    timeEstimates: {
+      overall: { ...inflation.global, minutesFor30Estimated: adjustedEstimate(30, inflation.global.factor) },
+      ...(wanted && categories.length === 0
+        ? { category: wanted, categoryNote: "Todavía no hay tareas medidas en esa categoría: se usa el factor general." }
+        : {}),
+      categories,
+      measuredNeeded: patterns.measuredNeeded,
+      note: "factor = cuántas veces lo estimado suele llevarle de verdad (1.5 = un 50% más). Solo cuentan las tareas hechas con el modo foco."
+    },
+    productiveHours: {
+      learned: hours.learned,
+      needed: hours.needed,
+      completedWithKnownHour: hours.total,
+      bestPart: hours.best,
+      sharesPercent: hours.shares
+    },
+    postponements: {
+      tasks: postponers.tasks.slice(0, PATTERN_LIST_MAX),
+      categories: postponers.categories.slice(0, PATTERN_LIST_MAX)
+    }
+  });
+}
+
 /** Tools que devuelven datos y no cierran el turno: el modelo puede seguir con otra. */
-export const READ_ONLY_TOOLS = new Set(["get_schedule"]);
+export const READ_ONLY_TOOLS = new Set(["get_schedule", "get_my_patterns"]);
 
 export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<ToolOutcome> {
   const args = parseArguments(call.arguments);
@@ -649,6 +717,8 @@ export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<Too
         const range = readRange(args);
         return "content" in range ? range : getSchedule(range, ctx, await ctx.load());
       }
+      case "get_my_patterns":
+        return await getMyPatterns(args, ctx);
       case "plan_week": {
         const request = readPlanRequest(args, ctx);
         return "content" in request ? request : planWeekTool(request, ctx, await ctx.load());

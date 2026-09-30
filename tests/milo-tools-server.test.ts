@@ -9,14 +9,16 @@ import { DEFAULT_AVAILABILITY } from "@/lib/availability";
 
 const loadTasks = vi.fn();
 const loadProjectRecords = vi.fn();
-const loadEstimateHistory = vi.fn();
+const loadHistory = vi.fn();
 const getAvailabilitySettings = vi.fn();
 
 vi.mock("@/lib/storage", () => ({ loadTasks: (...a: unknown[]) => loadTasks(...a) }));
-vi.mock("@/lib/projects-storage", () => ({
-  loadProjectRecords: (...a: unknown[]) => loadProjectRecords(...a),
-  loadEstimateHistory: (...a: unknown[]) => loadEstimateHistory(...a)
-}));
+vi.mock("@/lib/projects-storage", () => ({ loadProjectRecords: (...a: unknown[]) => loadProjectRecords(...a) }));
+// El loader real lee la base; acá se reemplaza por uno que arma los patrones con el historial del test.
+vi.mock("@/lib/user-history", async () => {
+  const { computePatterns } = await import("@/lib/user-patterns");
+  return { patternsLoader: (userId: string) => async () => computePatterns(await loadHistory(userId)) };
+});
 vi.mock("@/lib/facts-storage", () => ({ listFacts: vi.fn(async () => []), saveFact: vi.fn(async () => ({ status: "saved" })) }));
 vi.mock("@/lib/user-settings", () => ({ getAvailabilitySettings: (...a: unknown[]) => getAvailabilitySettings(...a) }));
 
@@ -44,7 +46,7 @@ beforeEach(() => {
     },
     { task: { id: "p2", title: "Terminado", done: true }, subtasks: [{ id: "s3", title: "X", done: false }], sessions: [{ subtaskId: "s3", date: "2026-09-29", minutes: 45 }] }
   ]);
-  loadEstimateHistory.mockResolvedValue([]);
+  loadHistory.mockResolvedValue([]);
   getAvailabilitySettings.mockResolvedValue({ availability: DEFAULT_AVAILABILITY, overrides: {}, configured: true });
 });
 
@@ -52,7 +54,7 @@ describe("createToolContext", () => {
   it("cada lectura recibe el usuario autenticado y nada más", async () => {
     const ctx = createToolContext("user_A", "2026-09-28", NOW);
     await ctx.load();
-    for (const reader of [loadTasks, loadProjectRecords, loadEstimateHistory, getAvailabilitySettings]) {
+    for (const reader of [loadTasks, loadProjectRecords, loadHistory, getAvailabilitySettings]) {
       expect(reader).toHaveBeenCalledTimes(1);
       expect(reader).toHaveBeenCalledWith("user_A");
     }
@@ -68,7 +70,7 @@ describe("createToolContext", () => {
       { id: "2", name: "plan_week", arguments: JSON.stringify({ items: [{ title: "A", kind: "task" }], userId: "user_B" }) },
       ctx
     );
-    for (const reader of [loadTasks, loadProjectRecords, loadEstimateHistory, getAvailabilitySettings]) {
+    for (const reader of [loadTasks, loadProjectRecords, loadHistory, getAvailabilitySettings]) {
       for (const args of reader.mock.calls) expect(args).toEqual(["user_A"]);
     }
   });
@@ -95,7 +97,7 @@ describe("createToolContext", () => {
 
   it("sin historial suficiente no infla; con historial usa el factor aprendido", async () => {
     expect((await createToolContext("user_A", "2026-09-28", NOW).load()).inflation).toBe(1);
-    loadEstimateHistory.mockResolvedValue(Array.from({ length: 6 }, () => ({ estimateMin: 30, actualMin: 45 })));
+    loadHistory.mockResolvedValue(Array.from({ length: 6 }, () => ({ title: "t", category: "study", estimateMin: 30, actualMin: 45, completed: true, completedHour: null, postponedCount: 0 })));
     expect((await createToolContext("user_A", "2026-09-28", NOW).load()).inflation).toBe(1.5);
   });
 });

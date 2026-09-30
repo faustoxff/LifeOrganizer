@@ -75,10 +75,10 @@ describe("sin tools", () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
-  it("le ofrece las cinco tools al modelo, con tool_choice auto", async () => {
+  it("le ofrece las seis tools al modelo, con tool_choice auto", async () => {
     const { deps, requests } = script([{ content: "hola" }]);
     await runMiloAgent(params(), deps);
-    expect(requests[0].tools?.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user", "remember_fact"]);
+    expect(requests[0].tools?.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user", "remember_fact", "get_my_patterns"]);
     expect(requests[0].toolChoice).toBe("auto");
   });
 

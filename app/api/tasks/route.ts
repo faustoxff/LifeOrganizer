@@ -6,6 +6,7 @@ import {
   createTask,
   updateTask,
   setTaskDone,
+  addTaskProgress,
   deleteTaskById,
   countUserTasks,
   countUserLooseTasks
@@ -28,7 +29,7 @@ import {
 import { checklistStore } from "@/lib/checklists-runtime";
 import { learnFromCompletion } from "@/lib/checklists-service";
 import { ruleFromRepeat } from "@/lib/recurrence";
-import { getTodayInTimeZone } from "@/lib/task-date";
+import { getHourInTimeZone, getTodayInTimeZone } from "@/lib/task-date";
 import { parseScope, parseTaskPayload } from "@/lib/task-validation";
 import { resolveUserTimeZone } from "@/lib/user-settings";
 import { MAX_TASKS_PER_USER } from "@/lib/usage-limits";
@@ -187,19 +188,49 @@ export async function PUT(request: Request) {
   }
 }
 
-// PATCH /api/tasks — toggle done status
+// PATCH /api/tasks — toggle done status, or add focus time without finishing.
+//   { taskId, done, actualMin? }  actualMin: minutes the focus timer really ran (optional; it
+//                                  is summed to what earlier sessions left). Without it nothing is
+//                                  measured: completing by tick leaves actual_min as it was.
+//   { taskId, progressMin }        a focus session was closed without completing the task.
+// The completion hour is the user's LOCAL hour (their stored time zone), not the server's.
 export async function PATCH(request: Request) {
   let userId: string;
   try { userId = await requireAuth(); }
   catch { return unauthorized(); }
 
-  const body = (await request.json()) as { taskId?: string; done?: boolean };
-  if (typeof body.taskId !== "string" || typeof body.done !== "boolean") {
+  const body = (await request.json()) as { taskId?: string; done?: boolean; actualMin?: unknown; progressMin?: unknown };
+  if (typeof body.taskId !== "string") {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const minutes = (value: unknown): number | null | "invalid" => {
+    if (value === undefined || value === null) return null;
+    return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 1440 ? value : "invalid";
+  };
+
+  if (body.done === undefined && body.progressMin !== undefined) {
+    const progress = minutes(body.progressMin);
+    if (progress === null || progress === "invalid") {
+      return NextResponse.json({ error: "Invalid progressMin" }, { status: 400 });
+    }
+    try {
+      const found = await addTaskProgress(body.taskId, progress, userId);
+      return found ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Task not found" }, { status: 404 });
+    } catch (err) {
+      console.error("addTaskProgress failed", err);
+      return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
+    }
+  }
+
+  const actualMin = minutes(body.actualMin);
+  if (typeof body.done !== "boolean" || actualMin === "invalid") {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
   try {
-    const updated = await setTaskDone(body.taskId, body.done, userId);
+    const now = new Date();
+    const completedHour = body.done ? getHourInTimeZone(await resolveUserTimeZone(userId), now) : null;
+    const updated = await setTaskDone(body.taskId, body.done, userId, { actualMin, completedHour });
     if (body.done) {
       // Completar una tarea con checklist es lo que enseña qué se usa y qué no. Es un plus:
       // nunca puede ser la razón por la que completar falle.

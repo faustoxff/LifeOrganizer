@@ -249,3 +249,18 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklist JSONB;
 -- Ubicacion aproximada (redondeada a 0,1 grados, unos 10 km). Solo sirve para el clima.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS approx_lat REAL;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS approx_lon REAL;
+
+-- Etapa 6: lo que pasa con cada tarea. Todo aditivo.
+--  * actual_min: minutos reales (solo si se hizo con el modo foco; NULL = no se sabe).
+--  * completed_hour: hora LOCAL del usuario (0-23) al completar.
+--  * postponed_count / last_postponed_at: cuántas veces se movió a un día posterior.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_min INTEGER
+  CHECK (actual_min IS NULL OR actual_min > 0);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_hour SMALLINT
+  CHECK (completed_hour IS NULL OR completed_hour BETWEEN 0 AND 23);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS postponed_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_postponed_at TIMESTAMPTZ;
+
+ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS completed_hour SMALLINT
+  CHECK (completed_hour IS NULL OR completed_hour BETWEEN 0 AND 23);
+ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS postponed_count INTEGER NOT NULL DEFAULT 0;

@@ -78,6 +78,10 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
     SET title = ${task.title}, category = ${task.category}, description = ${task.description},
         priority = ${task.priority}, duration = ${durationFromMinutes(task.estimateMin)},
         estimate_min = ${task.estimateMin}, due_date = ${task.dueDate},
+        postponed_count = postponed_count
+          + CASE WHEN ${task.dueDate} > due_date AND ${task.dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN 1 ELSE 0 END,
+        last_postponed_at = CASE WHEN ${task.dueDate} > due_date AND ${task.dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                                 THEN NOW() ELSE last_postponed_at END,
         done = ${task.done}, steps = ${JSON.stringify(task.steps ?? [])}::jsonb,
         kind = ${task.kind}, remind_at = ${task.time ?? null},
         daily_cap_min = ${task.kind === "project" ? (task.dailyCapMin ?? null) : null},
@@ -93,11 +97,34 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
   return normalizeTask(rows[0]);
 }
 
-export async function setTaskDone(taskId: string, done: boolean, userId: string): Promise<Task> {
+export type CompletionDetails = {
+  /** Minutos reales medidos por el modo foco en esta sesión. Se suman a los de sesiones anteriores. */
+  actualMin?: number | null;
+  /** Hora local (0-23) del usuario al completar. */
+  completedHour?: number | null;
+};
+
+/**
+ * Completa (o reabre) una tarea. Al completar guarda la hora local; `actual_min` solo
+ * cambia si el modo foco midió algo, y se acumula (varias sesiones). Sin modo foco queda
+ * como estaba (NULL si nunca se midió): no se inventa. Reabrirla borra la hora, pero
+ * conserva los minutos: el tiempo trabajado no se des-trabaja.
+ */
+export async function setTaskDone(
+  taskId: string,
+  done: boolean,
+  userId: string,
+  details: CompletionDetails = {}
+): Promise<Task> {
+  const actualMin = done && details.actualMin && details.actualMin > 0 ? Math.round(details.actualMin) : null;
+  const completedHour = done ? (details.completedHour ?? null) : null;
   const rows = await sql`
     UPDATE tasks
     SET done = ${done}, completed_at = ${done ? new Date().toISOString() : null},
-        status = ${done ? "done" : "pending"}
+        status = ${done ? "done" : "pending"},
+        completed_hour = ${completedHour}::smallint,
+        actual_min = CASE WHEN ${actualMin}::int IS NULL THEN actual_min
+                          ELSE COALESCE(actual_min, 0) + ${actualMin}::int END
     WHERE id = ${taskId} AND user_id = ${userId}
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
@@ -106,6 +133,43 @@ export async function setTaskDone(taskId: string, done: boolean, userId: string)
   const updated = normalizeTask(rows[0]);
   if (!updated) throw new Error("Failed to toggle task.");
   return updated;
+}
+
+/**
+ * Suma minutos de una sesión de foco que se cerró sin completar la tarea, para que lo
+ * trabajado no se pierda si se termina otro día. Devuelve false si no es del usuario.
+ */
+export async function addTaskProgress(taskId: string, minutes: number, userId: string): Promise<boolean> {
+  const rows = await sql`
+    UPDATE tasks
+    SET actual_min = COALESCE(actual_min, 0) + ${Math.round(minutes)}::int
+    WHERE id = ${taskId} AND user_id = ${userId} AND done = FALSE
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+/**
+ * Mueve una tarea a otra fecha y cuenta la postergación si es a un día posterior
+ * (`isPostponement`). Es la función para mover fechas SIN editar el resto de la tarea:
+ * la replanificación la va a usar. Editar desde el formulario aplica la misma regla en
+ * `updateTask`. Devuelve null si la tarea no existe o no es del usuario.
+ */
+export async function moveTaskDueDate(taskId: string, dueDate: string, userId: string): Promise<Task | null> {
+  const rows = await sql`
+    UPDATE tasks
+    SET postponed_count = postponed_count
+          + CASE WHEN ${dueDate} > due_date AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN 1 ELSE 0 END,
+        last_postponed_at = CASE WHEN ${dueDate} > due_date AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                                 THEN NOW() ELSE last_postponed_at END,
+        due_date = ${dueDate}
+    WHERE id = ${taskId} AND user_id = ${userId}
+      AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
+    RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
+              done, completed_at, steps, kind, remind_at, series_id,
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+  `;
+  return normalizeTask(rows[0]);
 }
 
 export async function deleteTaskById(taskId: string, userId: string): Promise<void> {

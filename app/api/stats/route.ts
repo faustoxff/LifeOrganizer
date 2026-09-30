@@ -6,6 +6,7 @@ import { requireAuth, getUserPlan, type UserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage } from "@/lib/usage-limits";
 import { loadSubtaskDoneDays } from "@/lib/projects-storage";
 import { loadTasks } from "@/lib/storage";
+import { patternsLoader } from "@/lib/user-history";
 import { bestStreakFromDayKeys, streakFromDayKeys } from "@/lib/streak";
 import { getSkippedDates, isSkipped } from "@/lib/task-views";
 import { Task } from "@/types/task";
@@ -36,7 +37,15 @@ export async function GET(request: Request) {
   const uiLanguage: AppLanguage = supportedLanguages.includes(langParam as AppLanguage)
     ? (langParam as AppLanguage)
     : "en";
-  const [allTasks, projectDays] = await Promise.all([loadTasks(userId), loadSubtaskDoneDays(userId)]);
+  const [allTasks, projectDays, patterns] = await Promise.all([
+    loadTasks(userId),
+    loadSubtaskDoneDays(userId),
+    // "Cómo trabajás": es un extra de la pantalla, así que si falla no se lleva las estadísticas.
+    patternsLoader(userId)().catch((error) => {
+      console.error("loadPatterns failed", error);
+      return null;
+    })
+  ]);
   // An occurrence the user let pass is neither pending nor failed: it stays out
   // of every count, and its day neither adds to a streak nor breaks it.
   const tasks = allTasks.filter((t) => !isSkipped(t));
@@ -69,7 +78,8 @@ export async function GET(request: Request) {
     bestStreak,
     totalCompleted,
     totalPending,
-    encouragement
+    encouragement,
+    patterns
   });
 }
 
