@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AppLanguage, supportedLanguages } from "@/lib/i18n";
 import { chatWithMilo, parseJsonObject } from "@/lib/milo";
 import { requireAuth, getUserPlan } from "@/lib/server-auth";
+import { clampEstimate } from "@/lib/task-estimate";
 import { consumeDailyUsage } from "@/lib/usage-limits";
 
 const MAX_FIELD = 500;
@@ -15,7 +16,7 @@ const LANGUAGE_NAMES: Record<AppLanguage, string> = {
 };
 
 type Body = {
-  task?: { title?: unknown; description?: unknown; category?: unknown; duration?: unknown };
+  task?: { title?: unknown; description?: unknown; category?: unknown; estimateMin?: unknown };
   uiLanguage?: unknown;
 };
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   const title = typeof body.task?.title === "string" ? body.task.title.trim().slice(0, MAX_FIELD) : "";
   const description = typeof body.task?.description === "string" ? body.task.description.trim().slice(0, MAX_FIELD) : "";
   const category = typeof body.task?.category === "string" ? body.task.category.trim().slice(0, 60) : "";
-  const duration = typeof body.task?.duration === "string" ? body.task.duration : "medium";
+  const estimatedMinutes = clampEstimate(body.task?.estimateMin);
   const language: AppLanguage = supportedLanguages.includes(body.uiLanguage as AppLanguage)
     ? (body.uiLanguage as AppLanguage)
     : "en";
@@ -54,7 +55,7 @@ Rules:
 
   try {
     const { content } = await chatWithMilo({
-      message: JSON.stringify({ title, description, category, estimatedDuration: duration }),
+      message: JSON.stringify({ title, description, category, estimatedMinutes }),
       context,
       // Splitting a task into steps is mechanical once the task is read.
       tier: "fast",

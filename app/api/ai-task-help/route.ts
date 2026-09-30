@@ -15,6 +15,8 @@ import {
   parseJsonObject
 } from "@/lib/milo";
 import { getDaysUntilDueDate } from "@/lib/task-date";
+import { isValidEstimate } from "@/lib/task-estimate";
+import { getUserToday } from "@/lib/user-settings";
 import { getTaskScore } from "@/lib/task-score";
 import {
   AiTaskHelpApiResponse,
@@ -26,7 +28,7 @@ import { Task } from "@/types/task";
 
 type AiTaskHelpRequestTask = Pick<
   Task,
-  "id" | "title" | "category" | "description" | "priority" | "duration" | "dueDate"
+  "id" | "title" | "category" | "description" | "priority" | "estimateMin" | "dueDate"
 >;
 
 type QuestionIntent =
@@ -98,16 +100,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const today = await getUserToday(userId);
   const taskInput: AiTaskHelpTaskInput = {
     id: task.id,
     title: task.title,
     category: task.category,
     description: task.description,
     priority: task.priority,
-    duration: task.duration,
+    estimateMin: task.estimateMin,
     dueDate: task.dueDate,
-    dueInDays: getDaysUntilDueDate(task.dueDate),
-    systemScore: getTaskScore(task)
+    dueInDays: getDaysUntilDueDate(task.dueDate, today),
+    systemScore: getTaskScore(task, today)
   };
   const questionIntent = detectQuestionIntent(question, taskInput);
 
@@ -398,7 +401,7 @@ function isValidTask(value: unknown): value is AiTaskHelpRequestTask {
     typeof task.category === "string" &&
     typeof task.description === "string" &&
     (task.priority === "low" || task.priority === "medium" || task.priority === "high") &&
-    (task.duration === "short" || task.duration === "medium" || task.duration === "long") &&
+    isValidEstimate(task.estimateMin) &&
     typeof task.dueDate === "string"
   );
 }

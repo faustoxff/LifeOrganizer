@@ -1,4 +1,4 @@
-import { TaskDuration, TaskPriority } from "@/types/task";
+import { TaskPriority } from "@/types/task";
 
 export interface AiTaskHelpTaskInput {
   id: string;
@@ -6,7 +6,7 @@ export interface AiTaskHelpTaskInput {
   category: string;
   description: string;
   priority: TaskPriority;
-  duration: TaskDuration;
+  estimateMin: number;
   dueDate: string;
   dueInDays: number;
   systemScore: number;

@@ -19,11 +19,9 @@ describe("getTaskPriorityLabel", () => {
 });
 
 describe("getTaskDurationLabel", () => {
-  it("returns a distinct, non-empty label for every language and length", () => {
-    for (const lang of supportedLanguages) {
-      const labels = (["short", "medium", "long"] as const).map((d) => getTaskDurationLabel(d, lang));
-      expect(labels.every((l) => l.trim().length > 0)).toBe(true);
-      expect(new Set(labels).size).toBe(3);
-    }
+  it("formats minutes the same way in every language", () => {
+    expect(getTaskDurationLabel(15)).toBe("15 min");
+    expect(getTaskDurationLabel(60)).toBe("1 h");
+    expect(getTaskDurationLabel(90)).toBe("1 h 30");
   });
 });

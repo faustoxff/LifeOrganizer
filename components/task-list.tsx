@@ -121,7 +121,7 @@ function TaskGroup({
                       ) : null}
                       <p className="mt-1.5 text-xs text-muted-foreground">
                         {task.category} · {getTaskPriorityLabel(task.priority, language)} ·{" "}
-                        {getTaskDurationLabel(task.duration, language)} · {getDueDateLabel(task.dueDate, language)} ·{" "}
+                        {getTaskDurationLabel(task.estimateMin)} · {getDueDateLabel(task.dueDate, language)} ·{" "}
                         {formatDueDate(task.dueDate, language)}
                       </p>
                     </div>

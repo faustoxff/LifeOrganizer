@@ -1,7 +1,9 @@
 import { Task } from "@/types/task";
 import { getDaysUntilDueDate } from "@/lib/task-date";
+import { durationFromMinutes } from "@/lib/task-estimate";
+import { isRecommendable } from "@/lib/task-views";
 
-type ScoredTask = Pick<Task, "priority" | "duration" | "dueDate">;
+type ScoredTask = Pick<Task, "priority" | "estimateMin" | "dueDate">;
 
 const priorityPoints = {
   low: 2,
@@ -9,35 +11,39 @@ const priorityPoints = {
   high: 8
 };
 
+// Los cortes salen de los minutos (<=20 corta, <=75 media, el resto larga), los
+// mismos que usa la columna `duration` derivada. Puntúa lo mismo que antes para
+// las tareas que ya existían: el backfill las llevó a 15/45/120.
 const durationPoints = {
   short: 0,
   medium: 2,
   long: 5
 };
 
-export function getTaskScore(task: Pick<Task, "priority" | "duration" | "dueDate">) {
-  return getTaskScoreWithContext(task, { hasCriticalTasks: false });
+/** `today` ("YYYY-MM-DD") es obligatorio en el servidor; el cliente puede omitirlo. */
+export function getTaskScore(task: ScoredTask, today?: string) {
+  return getTaskScoreWithContext(task, { hasCriticalTasks: false, today });
 }
 
-export function getRecommendedTask(tasks: Task[]) {
-  const pendingTasks = tasks.filter((task) => !task.done);
+export function getRecommendedTask(tasks: Task[], today?: string) {
+  const pendingTasks = tasks.filter((task) => isRecommendable(task, today));
 
   if (pendingTasks.length === 0) {
     return null;
   }
 
-  const hasCriticalTasks = pendingTasks.some(isCriticalTask);
+  const hasCriticalTasks = pendingTasks.some((task) => isCriticalTask(task, today));
 
   const sortedTasks = [...pendingTasks].sort((leftTask, rightTask) => {
-    const leftScore = getTaskScoreWithContext(leftTask, { hasCriticalTasks });
-    const rightScore = getTaskScoreWithContext(rightTask, { hasCriticalTasks });
+    const leftScore = getTaskScoreWithContext(leftTask, { hasCriticalTasks, today });
+    const rightScore = getTaskScoreWithContext(rightTask, { hasCriticalTasks, today });
 
     if (rightScore !== leftScore) {
       return rightScore - leftScore;
     }
 
-    const leftTaskDueDays = getDaysUntilDueDate(leftTask.dueDate);
-    const rightTaskDueDays = getDaysUntilDueDate(rightTask.dueDate);
+    const leftTaskDueDays = getDaysUntilDueDate(leftTask.dueDate, today);
+    const rightTaskDueDays = getDaysUntilDueDate(rightTask.dueDate, today);
 
     if (leftTaskDueDays !== rightTaskDueDays) {
       return leftTaskDueDays - rightTaskDueDays;
@@ -47,10 +53,10 @@ export function getRecommendedTask(tasks: Task[]) {
       return priorityPoints[rightTask.priority] - priorityPoints[leftTask.priority];
     }
 
-    if (leftTask.duration !== rightTask.duration) {
+    if (leftTask.estimateMin !== rightTask.estimateMin) {
       return (
-        getDurationPoints(rightTask.duration, rightTaskDueDays, hasCriticalTasks) -
-        getDurationPoints(leftTask.duration, leftTaskDueDays, hasCriticalTasks)
+        getDurationPoints(rightTask.estimateMin, rightTaskDueDays, hasCriticalTasks) -
+        getDurationPoints(leftTask.estimateMin, leftTaskDueDays, hasCriticalTasks)
       );
     }
 
@@ -81,10 +87,11 @@ function getUrgencyPoints(daysUntilDueDate: number) {
 }
 
 function getDurationPoints(
-  duration: Task["duration"],
+  estimateMin: number,
   daysUntilDueDate: number,
   hasCriticalTasks: boolean
 ) {
+  const duration = durationFromMinutes(estimateMin);
   let score = durationPoints[duration];
 
   if (duration === "long") {
@@ -108,23 +115,26 @@ function getDurationPoints(
   return score;
 }
 
-function getTaskScoreWithContext(task: ScoredTask, context: { hasCriticalTasks: boolean }) {
-  const daysUntilDueDate = getDaysUntilDueDate(task.dueDate);
+function getTaskScoreWithContext(
+  task: ScoredTask,
+  context: { hasCriticalTasks: boolean; today?: string }
+) {
+  const daysUntilDueDate = getDaysUntilDueDate(task.dueDate, context.today);
   let score = 0;
 
   score += priorityPoints[task.priority];
   score += getUrgencyPoints(daysUntilDueDate);
-  score += getDurationPoints(task.duration, daysUntilDueDate, context.hasCriticalTasks);
+  score += getDurationPoints(task.estimateMin, daysUntilDueDate, context.hasCriticalTasks);
 
   return score;
 }
 
-function isCriticalTask(task: Pick<Task, "priority" | "duration" | "dueDate">) {
-  const daysUntilDueDate = getDaysUntilDueDate(task.dueDate);
+function isCriticalTask(task: ScoredTask, today?: string) {
+  const daysUntilDueDate = getDaysUntilDueDate(task.dueDate, today);
 
   return (
     daysUntilDueDate <= 3 ||
     task.priority === "high" ||
-    (task.duration === "long" && daysUntilDueDate <= 7)
+    (durationFromMinutes(task.estimateMin) === "long" && daysUntilDueDate <= 7)
   );
 }

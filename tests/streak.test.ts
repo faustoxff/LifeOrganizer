@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bestStreakFromDayKeys,
   getStreakFromCompletions,
   getBadgeProgress,
   getCurrentBadge,
@@ -114,5 +115,63 @@ describe("getStreakFromCompletions", () => {
 
   it("counts a day once even with several tasks finished on it", () => {
     expect(getStreakFromCompletions([dayAgo(0), dayAgo(0), dayAgo(0), dayAgo(1)])).toBe(2);
+  });
+});
+
+describe("racha con ocurrencias salteadas", () => {
+  const key = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+  const at = (n: number) => `${key(n)}T12:00:00.000Z`;
+
+  it("un día salteado en el medio no corta la racha", () => {
+    // Hecho hoy, ayer salteado (el gimnasio), hecho anteayer.
+    expect(getStreakFromCompletions([at(0), at(2)], [key(1)])).toBe(2);
+    // Sin el salteado, ese hueco sí la corta.
+    expect(getStreakFromCompletions([at(0), at(2)])).toBe(1);
+  });
+
+  it("un día salteado tampoco suma: no infla la racha", () => {
+    expect(getStreakFromCompletions([at(0), at(1), at(3)], [key(2)])).toBe(3);
+    expect(getStreakFromCompletions([at(0), at(1), at(2)])).toBe(3);
+  });
+
+  it("varios salteados seguidos se atraviesan", () => {
+    expect(getStreakFromCompletions([at(0), at(4)], [key(1), key(2), key(3)])).toBe(2);
+  });
+
+  it("un hueco que no es salteado sigue cortando", () => {
+    expect(getStreakFromCompletions([at(0), at(4)], [key(1), key(3)])).toBe(1);
+  });
+
+  it("solo salteados y ninguna tarea hecha no es una racha", () => {
+    expect(getStreakFromCompletions([], [key(1), key(2)])).toBe(0);
+    expect(getStreakFromCompletions([at(5)], [key(1), key(2)])).toBe(0);
+  });
+
+  it("ayer salteado y hoy sin hacer todavía mantiene viva la racha anterior", () => {
+    expect(getStreakFromCompletions([at(2), at(3)], [key(1)])).toBe(2);
+  });
+
+  it("no cambia nada cuando no hay salteados", () => {
+    expect(getStreakFromCompletions([at(0), at(1), at(3)], [])).toBe(2);
+  });
+});
+
+describe("mejor racha con días neutrales", () => {
+  it("atraviesa los salteados y no los cuenta", () => {
+    const neutral = new Set(["2026-09-02", "2026-09-03"]);
+    expect(bestStreakFromDayKeys(["2026-09-01", "2026-09-04", "2026-09-05"], neutral)).toBe(3);
+    expect(bestStreakFromDayKeys(["2026-09-01", "2026-09-04", "2026-09-05"], new Set())).toBe(2);
+  });
+
+  it("un hueco parcialmente neutral corta", () => {
+    expect(bestStreakFromDayKeys(["2026-09-01", "2026-09-04"], new Set(["2026-09-02"]))).toBe(1);
+  });
+
+  it("no hay días, no hay racha", () => {
+    expect(bestStreakFromDayKeys([], new Set(["2026-09-02"]))).toBe(0);
   });
 });

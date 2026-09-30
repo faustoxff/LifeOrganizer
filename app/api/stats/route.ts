@@ -5,6 +5,8 @@ import { chatWithMilo } from "@/lib/milo";
 import { requireAuth, getUserPlan, type UserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage } from "@/lib/usage-limits";
 import { loadTasks } from "@/lib/storage";
+import { bestStreakFromDayKeys, streakFromDayKeys } from "@/lib/streak";
+import { getSkippedDates, isSkipped } from "@/lib/task-views";
 import { Task } from "@/types/task";
 
 const WEEKS_OF_HISTORY = 8;
@@ -33,11 +35,15 @@ export async function GET(request: Request) {
   const uiLanguage: AppLanguage = supportedLanguages.includes(langParam as AppLanguage)
     ? (langParam as AppLanguage)
     : "en";
-  const tasks = await loadTasks(userId);
+  const allTasks = await loadTasks(userId);
+  // An occurrence the user let pass is neither pending nor failed: it stays out
+  // of every count, and its day neither adds to a streak nor breaks it.
+  const tasks = allTasks.filter((t) => !isSkipped(t));
+  const skippedDays = new Set(getSkippedDates(allTasks));
 
   const completionRate = getCompletionRate(tasks);
-  const activeStreak = getActiveStreak(tasks);
-  const bestStreak = getBestStreak(tasks);
+  const activeStreak = getActiveStreak(tasks, skippedDays);
+  const bestStreak = getBestStreak(tasks, skippedDays);
   const byCategory = getByCategory(tasks);
   const totalCompleted = tasks.filter((t) => t.done).length;
   const totalPending = tasks.filter((t) => !t.done).length;
@@ -177,57 +183,23 @@ function getByCategory(tasks: Task[]): { category: string; count: number; isOthe
   return restTotal > 0 ? [...top, { category: "", count: restTotal, isOther: true }] : top;
 }
 
-function getActiveStreak(tasks: Task[]): number {
+function getActiveStreak(tasks: Task[], skippedDays: ReadonlySet<string>): number {
   const completedDates = new Set(
     tasks
       .filter((t) => t.done && t.completedAt)
       .map((t) => new Date(t.completedAt!).toISOString().split("T")[0])
   );
 
-  let streak = 0;
-  const cursor = new Date();
-
-  while (true) {
-    const key = cursor.toISOString().split("T")[0];
-    if (!completedDates.has(key)) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return streak;
+  return streakFromDayKeys(completedDates, skippedDays, new Date().toISOString().split("T")[0], false);
 }
 
 /** Longest run of consecutive days with at least one completed task, ever. */
-function getBestStreak(tasks: Task[]): number {
-  const days = [
-    ...new Set(
-      tasks
-        .filter((t) => t.done && t.completedAt)
-        .map((t) => new Date(t.completedAt!).toISOString().split("T")[0])
-    )
-  ].sort();
+function getBestStreak(tasks: Task[], skippedDays: ReadonlySet<string>): number {
+  const days = tasks
+    .filter((t) => t.done && t.completedAt)
+    .map((t) => new Date(t.completedAt!).toISOString().split("T")[0]);
 
-  let best = 0;
-  let run = 0;
-  let previous: string | null = null;
-
-  for (const day of days) {
-    if (previous !== null && isNextDay(previous, day)) {
-      run++;
-    } else {
-      run = 1;
-    }
-    if (run > best) best = run;
-    previous = day;
-  }
-
-  return best;
-}
-
-function isNextDay(previous: string, current: string): boolean {
-  const p = new Date(`${previous}T00:00:00Z`);
-  p.setUTCDate(p.getUTCDate() + 1);
-  return p.toISOString().split("T")[0] === current;
+  return bestStreakFromDayKeys(days, skippedDays);
 }
 
 function startOfWeek(date: Date): Date {

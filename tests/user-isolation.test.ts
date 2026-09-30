@@ -29,6 +29,39 @@ describe("database access", () => {
     }
   });
 
+  it("scopes every series, subtask and settings query to the owner", () => {
+    // Series and occurrences are the newest place a task can leak across
+    // accounts: a series id or a task id from another user must find nothing.
+    for (const path of ["lib/series-storage.ts", "lib/user-settings.ts"]) {
+      const statements = read(path).match(/sql`[\s\S]*?`/g) ?? [];
+      expect(statements.length).toBeGreaterThan(0);
+      for (const statement of statements) {
+        expect(statement, `unscoped query in ${path}:\n${statement}`).toMatch(/user_id/);
+        // Reads and writes by id must compare user_id to the caller, not merely
+        // mention the column. (Inserts carry it as a value, which is enough.)
+        if (/^\s*sql`\s*(SELECT|UPDATE|DELETE)/i.test(statement)) {
+          expect(statement, `by-id query without an owner check in ${path}:\n${statement}`).toMatch(
+            /user_id\s*=\s*\$\{/
+          );
+        }
+      }
+    }
+  });
+
+  it("never queries subtasks without the owner", () => {
+    // The table exists but nothing reads it yet (stage 3). This guards the day
+    // something does: any statement that touches it must be scoped.
+    const files = execSync("git ls-files 'lib/**/*.ts' 'app/**/*.ts'", { encoding: "utf8" })
+      .split("\n")
+      .filter(Boolean);
+    for (const path of files) {
+      const statements = read(path).match(/sql`[\s\S]*?`/g) ?? [];
+      for (const statement of statements.filter((s) => /\bsubtasks\b/i.test(s))) {
+        expect(statement, `unscoped subtasks query in ${path}:\n${statement}`).toMatch(/user_id\s*=\s*\$\{/);
+      }
+    }
+  });
+
   it("keeps per-user tables keyed by user_id", () => {
     for (const path of ["lib/user-memory.ts", "lib/usage-limits.ts"]) {
       const statements = read(path).match(/sql`[\s\S]*?`/g) ?? [];
@@ -37,6 +70,24 @@ describe("database access", () => {
         expect(statement, `unscoped query in ${path}:\n${statement}`).toMatch(/user_id/);
       }
     }
+  });
+});
+
+describe("schema", () => {
+  const schema = read("neon/schema.sql");
+
+  it("gives every new per-user table a user_id", () => {
+    for (const table of ["task_series", "subtasks", "user_settings"]) {
+      const body = schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\n\\);`))?.[1];
+      expect(body, `${table} is missing from the schema`).toBeDefined();
+      expect(body, `${table} has no user_id`).toMatch(/\buser_id\s+TEXT/);
+    }
+  });
+
+  it("makes an occurrence unique per series and date", () => {
+    expect(schema).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS tasks_series_occurrence_uniq\s+ON tasks \(series_id, occurrence_date\) WHERE series_id IS NOT NULL/
+    );
   });
 });
 

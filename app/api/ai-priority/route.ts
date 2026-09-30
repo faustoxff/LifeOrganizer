@@ -14,6 +14,7 @@ import {
   parseJsonObject
 } from "@/lib/milo";
 import { getDaysUntilDueDate } from "@/lib/task-date";
+import { getUserToday } from "@/lib/user-settings";
 import { getTaskScore } from "@/lib/task-score";
 import {
   AiPriorityApiResponse,
@@ -24,7 +25,7 @@ import { Task } from "@/types/task";
 
 type AiPriorityRequestTask = Pick<
   Task,
-  "id" | "title" | "category" | "description" | "priority" | "duration" | "dueDate"
+  "id" | "title" | "category" | "description" | "priority" | "estimateMin" | "dueDate"
 >;
 
 const AI_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -73,16 +74,19 @@ export async function POST(request: Request) {
     });
   }
 
+  // "Today" is the user's, not the server's: on UTC the day is wrong for hours
+  // every evening for anyone west of it, which shifted every dueInDays.
+  const today = await getUserToday(userId);
   const taskInputs: AiPriorityTaskInput[] = pendingTasks.map((task) => ({
     id: task.id,
     title: task.title,
     category: task.category,
     description: task.description,
     priority: task.priority,
-    duration: task.duration,
+    estimateMin: task.estimateMin,
     dueDate: task.dueDate,
-    dueInDays: getDaysUntilDueDate(task.dueDate),
-    systemScore: getTaskScore(task)
+    dueInDays: getDaysUntilDueDate(task.dueDate, today),
+    systemScore: getTaskScore(task, today)
   }));
 
   // The quota is charged here, not at the top of the handler.

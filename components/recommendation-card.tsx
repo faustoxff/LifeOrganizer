@@ -221,7 +221,7 @@ function RecommendationCardContent({
         />
         <MetaItem
           label={copy.recommendation.duration}
-          value={recommendedTask ? getTaskDurationLabel(recommendedTask.duration, language) : "-"}
+          value={recommendedTask ? getTaskDurationLabel(recommendedTask.estimateMin) : "-"}
         />
         {isExpanded ? (
           <MetaItem
