@@ -426,8 +426,26 @@ del mismo módulo, que solo se usa en el fallback.
 
 ### Decisiones de la etapa 4
 
-- Free no tiene tools; los límites de `milo_chat` no cambian.
-- `get_schedule` conoce las ocurrencias de recurrentes que ya están generadas (ventana de
-  14 días) y lo dice cuando el rango la pasa.
-- `plan_week` sin `weekStart` planifica los próximos 7 días desde hoy.
-- Si falla una ronda después de haber propuesto algo, la propuesta se devuelve igual.
+- **Free no tiene tools**; los límites de `milo_chat` no cambian y un turno con varias rondas
+  cuenta como **un** uso.
+- **`plan_week` es para ítems nuevos.** Lo que el usuario ya tiene en su lista cuenta como
+  agendado (carga fija de cada día) y el prompt le pide a Milo que no lo repita.
+- **Sin `weekStart`, `plan_week` planifica los próximos 7 días desde hoy** (no la semana
+  calendario). Para "la semana que viene" Milo pasa el lunes que viene, que está en su tabla de
+  fechas.
+- **Un proyecto no entra en `plan_week`** (se rechaza con el motivo): se arma desde el asistente.
+- **Duración de los ítems nuevos**: se infla con el factor aprendido del usuario solo si hay
+  historial suficiente; sin él se usa la estimación tal cual, en vez de aplicar el 1,3 por
+  defecto de los proyectos a tareas sueltas. Lo ya agendado cuenta sin inflar.
+- **Criterios en escalones** (pesadas > tope del 85 % > día liviano > parejo), más un desempate
+  leve por "mejor antes que después" (`EARLY_BIAS`): con capacidades parecidas, el martes le gana al
+  sábado. El día liviano puede usarse hasta el 50 % de su capacidad sin dejar de serlo, y se
+  rompe antes que pasarse del 85 % en otro día.
+- **`get_schedule`** conoce las ocurrencias de recurrentes que ya están generadas (ventana de
+  14 días) y lo dice cuando el rango la pasa. No genera ocurrencias: no escribe.
+- **Si falla una ronda después de haber propuesto algo**, la propuesta se devuelve igual con un
+  texto por defecto.
+- **Fallo parcial al confirmar**: lo que sí se creó no se vuelve a ofrecer (antes, reintentar
+  duplicaba las que ya existían).
+- **Interruptores**: `GROQ_TOOLS=off` y `OLLAMA_TOOLS=on|off` mandan el chat al camino de texto sin
+  tocar código.
