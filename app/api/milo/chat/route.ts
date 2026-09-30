@@ -3,6 +3,8 @@ import { after, NextResponse } from "next/server";
 import { chatWithMilo, classifyChatFailure, refreshUserMemorySummary } from "@/lib/milo";
 import { buildTaskPromptParts } from "@/lib/milo-chat-prompt";
 import { parseTaskActions } from "@/lib/task-actions";
+import { getZonedNow } from "@/lib/task-date";
+import { resolveUserTimeZone } from "@/lib/user-settings";
 import { requireAuth, getUserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage, dailyLimitResponse } from "@/lib/usage-limits";
 import { clampTasksForPrompt, HISTORY_CONTENT_LIMIT, HISTORY_MESSAGES_LIMIT } from "@/lib/prompt-input";
@@ -56,11 +58,17 @@ export async function POST(request: Request) {
     content: typeof m.content === "string" ? m.content.slice(0, HISTORY_CONTENT_LIMIT) : ""
   }));
 
+  // "Today" is the user's. On UTC the model was told tomorrow's date for hours
+  // every evening, and every relative date it resolved ("mañana", "el jueves")
+  // came out a day late.
+  const now = getZonedNow(await resolveUserTimeZone(userId));
+
   const { static: staticContext, dynamic: dynamicContext } = buildTaskPromptParts({
     tasks,
     pendingTaskAction: body.pendingTaskAction ?? null,
     canCreateTasks,
-    userMemory
+    userMemory,
+    now
   });
 
   try {
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
       history,
       isPro: plan === "pro"
     });
-    const parsed = parseTaskActions(content);
+    const parsed = parseTaskActions(content, now);
 
     // This used to swallow every malformed block, so "Milo no me creo las
     // tareas" had no explanation anywhere. Now the reason is in the logs.

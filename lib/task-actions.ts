@@ -1,13 +1,18 @@
-import type { TaskInput, TaskPriority, TaskDuration } from "@/types/task";
+import { isDateKey, normalizeRepeat } from "@/lib/recurrence";
+import { DEFAULT_ESTIMATE_BY_KIND, isValidEstimate } from "@/lib/task-estimate";
+import { suggestKind } from "@/lib/task-kind";
+import type { TaskInput, TaskKind, TaskPriority } from "@/types/task";
 
 /**
  * Milo's task block used to be parsed with `JSON.parse` over everything that
  * followed the `TASKS_ACTION:` marker. That throws away the whole batch — with
  * no error and nothing in the logs — whenever the model adds a period, wraps the
  * JSON in a ``` fence, keeps talking after the block, or gets cut off by
- * `max_tokens`. Recurring requests ("gimnasio los miércoles y sábados") expand
- * to one task per occurrence, so those are the ones that reliably overflowed and
- * silently created nothing.
+ * `max_tokens`. Recurring requests ("gimnasio los miércoles y sábados") used to
+ * expand to one task per occurrence, so those are the ones that reliably
+ * overflowed and silently created nothing. A recurrence is now ONE item with a
+ * `repeat`, and the server creates the series; the expansion problem is gone,
+ * but the parser stays defensive because the other failure modes are not.
  *
  * Everything here is pure so the mangling cases can be pinned by tests.
  */
@@ -32,12 +37,16 @@ function defaultDueDate(now: Date): string {
   return sevenDaysLater.toISOString().split("T")[0];
 }
 
+const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+const KINDS: TaskKind[] = ["reminder", "task", "project"];
+
 export function normalizeTaskAction(
   parsed: unknown,
   now: Date = new Date()
 ): TaskInput | null {
   if (!parsed || typeof parsed !== "object") return null;
-  const item = parsed as Partial<TaskInput>;
+  const item = parsed as Partial<Record<keyof TaskInput, unknown>>;
 
   const title = typeof item.title === "string" ? item.title.trim() : "";
   if (!title) return null;
@@ -45,23 +54,45 @@ export function normalizeTaskAction(
   const priority: TaskPriority = ["low", "medium", "high"].includes(item.priority as TaskPriority)
     ? (item.priority as TaskPriority)
     : "medium";
-  const duration: TaskDuration = ["short", "medium", "long"].includes(item.duration as TaskDuration)
-    ? (item.duration as TaskDuration)
-    : "medium";
 
-  return {
+  // A malformed date is worse than no date: it would sort the task randomly
+  // instead of falling back to the documented default.
+  const dueDate =
+    typeof item.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.dueDate)
+      ? item.dueDate
+      : defaultDueDate(now);
+
+  const time = typeof item.time === "string" && TIME_RE.test(item.time) ? item.time : undefined;
+  const description = typeof item.description === "string" ? item.description.trim() : "";
+
+  // `kind` is optional for the model. When it is missing or nonsense the same
+  // rules the form uses pick one, so a reminder created by chat and one created
+  // by hand end up the same.
+  const kind: TaskKind = KINDS.includes(item.kind as TaskKind)
+    ? (item.kind as TaskKind)
+    : suggestKind({ title, description, dueDate, time, today: now.toISOString().split("T")[0] });
+
+  const action: TaskInput = {
     title,
     category: typeof item.category === "string" && item.category.trim() ? item.category.trim() : "general",
-    description: typeof item.description === "string" ? item.description.trim() : "",
+    description,
     priority,
-    duration,
-    // A malformed date is worse than no date: it would sort the task randomly
-    // instead of falling back to the documented default.
-    dueDate:
-      typeof item.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.dueDate)
-        ? item.dueDate
-        : defaultDueDate(now)
+    estimateMin: isValidEstimate(item.estimateMin) ? item.estimateMin : DEFAULT_ESTIMATE_BY_KIND[kind],
+    dueDate,
+    kind
   };
+  if (time) action.time = time;
+
+  // A broken `repeat` costs the recurrence, never the item: the user still gets
+  // the task they asked for, once. Projects do not repeat.
+  const repeat = kind === "project" ? null : normalizeRepeat(item.repeat);
+  if (repeat) {
+    // An end before the first date would produce a series with nothing in it.
+    if (repeat.until && (!isDateKey(repeat.until) || repeat.until < dueDate)) delete repeat.until;
+    action.repeat = repeat;
+  }
+
+  return action;
 }
 
 /**

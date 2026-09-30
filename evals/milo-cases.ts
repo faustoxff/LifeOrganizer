@@ -59,7 +59,9 @@ const sampleTasks = (): Task[] => [
     category: "universidad",
     description: "",
     priority: "high",
-    duration: "long",
+    estimateMin: 120,
+    kind: "task",
+    status: "pending",
     dueDate: IN_3_DAYS,
     done: false
   }
@@ -92,6 +94,17 @@ export type Expectation = {
    * the day of are both correct, the day after is not.
    */
   datesOnOrBefore?: string[];
+  /**
+   * At least one proposed item must carry a `repeat` of this frequency (and cover
+   * these weekdays, 0=Sun..6=Sat). A recurrence is ONE item with `repeat`; the
+   * server generates the occurrences.
+   */
+  repeat?: { freq: "daily" | "weekly" | "monthly"; weekdays?: number[]; monthDay?: number };
+  /**
+   * Ceiling on how many items may be proposed. It is what catches the model
+   * going back to one task per occurrence ("una tarea por vez").
+   */
+  maxTasks?: number;
   /** Hard ceiling on visible reply length. Comfort is part of correctness. */
   maxChars?: number;
   /** Only for plan-free cases: the reply must point at the upgrade path. */
@@ -121,32 +134,57 @@ export const CASES: EvalCase[] = [
     // the token budget, losing the entire batch with nothing in the logs.
     message:
       "mañana voy a cursar a la mañana y voy al gimnasio miércoles y sábados",
-    // Wednesdays and Saturdays are the requirement; whether the run starts this
-    // week or next is the model's call, so pin the weekday, not the exact day.
+    // Wednesdays and Saturdays are the requirement, and they travel in ONE item
+    // with `repeat`, not as a task per occurrence. "cursar" is a second item.
     expectation: {
       tasks: "some",
       titles: ["gimnasio", "cursar"],
       dates: [TOMORROW],
-      weekdays: [3, 6]
+      repeat: { freq: "weekly", weekdays: [3, 6] },
+      maxTasks: 3
     }
   },
   {
     name: "recurrencia: todos los lunes pago el alquiler",
     message: "todos los lunes tengo que pagar el alquiler, agendamelo",
     // Said on a Monday: starting today or next Monday are both defensible, so
-    // pin the shape (consecutive Mondays, starting within the next 2 weeks)
-    // rather than one exact day.
-    expectation: { tasks: "some", titles: ["alquiler"], datesOnOrBefore: [iso(addDays(NOW, 8))] }
+    // pin the shape (a weekly repeat on Mondays that starts within the next 2
+    // weeks) rather than one exact day.
+    expectation: {
+      tasks: "some",
+      titles: ["alquiler"],
+      datesOnOrBefore: [iso(addDays(NOW, 8))],
+      repeat: { freq: "weekly", weekdays: [1] },
+      maxTasks: 1
+    }
   },
   {
     name: "recurrencia: frase corta y coloquial",
     message: "gimnasio los martes",
-    expectation: { tasks: "some", titles: ["gimnasio"] }
+    expectation: {
+      tasks: "some",
+      titles: ["gimnasio"],
+      repeat: { freq: "weekly", weekdays: [2] },
+      maxTasks: 1
+    }
   },
   {
     name: "recurrencia: cada dia sin decir el dia",
     message: "tengo que llamar a mi mamá todos los días",
-    expectation: { tasks: "some", titles: ["mamá"] }
+    expectation: { tasks: "some", titles: ["mamá"], repeat: { freq: "daily" }, maxTasks: 1 }
+  },
+
+  {
+    name: "recurrencia: mensual con dia del mes",
+    message: "el 5 de cada mes tengo que pagar el alquiler",
+    expectation: { tasks: "some", titles: ["alquiler"], repeat: { freq: "monthly", monthDay: 5 }, maxTasks: 1 }
+  },
+  {
+    name: "recurrencia: no expande una tarea por ocurrencia",
+    // The behaviour this stage exists to remove: "todos los días durante un mes"
+    // used to become 12 objects and overflow the block.
+    message: "quiero tomar agua todos los días durante un mes, agendamelo",
+    expectation: { tasks: "some", titles: ["agua"], repeat: { freq: "daily" }, maxTasks: 1 }
   },
 
   // -------------------------------------------------------------- explicit ask
@@ -334,7 +372,7 @@ export const CASES: EvalCase[] = [
   {
     name: "regresion: recurrente diaria sin pedir permiso",
     message: "tengo que llamar a mi mamá todos los días",
-    expectation: { tasks: "some", titles: ["mamá"] }
+    expectation: { tasks: "some", titles: ["mamá"], repeat: { freq: "daily" }, maxTasks: 1 }
   },
   {
     name: "regresion: voseo consistente",

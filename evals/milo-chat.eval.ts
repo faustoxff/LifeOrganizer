@@ -183,16 +183,35 @@ if (!hasAnyProvider) {
         }
       }
       for (const weekday of e.weekdays ?? []) {
-        const hit = dates.some((actual) => {
-          // Parse as UTC so the weekday is read off the date string itself and
-          // not shifted by the runner's timezone.
-          const d = new Date(`${actual}T00:00:00Z`);
-          return !Number.isNaN(d.getTime()) && d.getUTCDay() === weekday;
-        });
+        const hit =
+          // A recurrence carries its weekdays in `repeat`, not in the dates.
+          out.tasks.some((t) => t.repeat?.weekdays?.includes(weekday)) ||
+          dates.some((actual) => {
+            // Parse as UTC so the weekday is read off the date string itself and
+            // not shifted by the runner's timezone.
+            const d = new Date(`${actual}T00:00:00Z`);
+            return !Number.isNaN(d.getTime()) && d.getUTCDay() === weekday;
+          });
         if (!hit) {
           const days = dates.map((a) => `${a}(${new Date(`${a}T00:00:00Z`).getUTCDay()})`);
           fail(`expected a task on weekday ${weekday}, got [${days.join(" | ")}]`);
         }
+      }
+      if (e.repeat) {
+        const wanted = e.repeat;
+        const hit = out.tasks.some(
+          (t) =>
+            t.repeat?.freq === wanted.freq &&
+            (wanted.weekdays ?? []).every((d) => t.repeat?.weekdays?.includes(d)) &&
+            (wanted.monthDay === undefined || t.repeat?.monthDay === wanted.monthDay)
+        );
+        if (!hit) {
+          const got = out.tasks.map((t) => JSON.stringify(t.repeat ?? null));
+          fail(`expected an item with repeat ${JSON.stringify(wanted)}, got [${got.join(" | ")}]`);
+        }
+      }
+      if (e.maxTasks !== undefined && out.tasks.length > e.maxTasks) {
+        fail(`expected at most ${e.maxTasks} item(s) but got ${out.tasks.length}: a recurrence must be ONE item with repeat, not one per occurrence`);
       }
     } else if (e.tasks === "none" || e.tasks === "either") {
       if (e.tasks === "none" && out.tasks.length > 0) {

@@ -9,6 +9,10 @@ import type { Task, TaskInput } from "@/types/task";
  *
  * `now` is injectable so date-dependent assertions are deterministic. Anything
  * that says "hoy" to the model must use it, never `new Date()` directly.
+ *
+ * In production `now` is `getZonedNow(userTimeZone)`: a Date whose UTC fields are
+ * the user's wall clock, so every date below is built with UTC getters/setters.
+ * Local ones would read the server's zone and be wrong for anyone else.
  */
 
 export type BuildContextOptions = {
@@ -54,20 +58,20 @@ function dateReferences(now: Date): string {
   const rows: string[] = [];
   for (let offset = 0; offset < 7; offset += 1) {
     const day = new Date(now);
-    day.setDate(day.getDate() + offset);
-    const name = WEEKDAY_NAMES[day.getDay()];
+    day.setUTCDate(day.getUTCDate() + offset);
+    const name = WEEKDAY_NAMES[day.getUTCDay()];
     const dates = [0, 1, 2].map((weeks) => {
       const d = new Date(day);
-      d.setDate(d.getDate() + weeks * 7);
+      d.setUTCDate(d.getUTCDate() + weeks * 7);
       return isoDate(d);
     });
     rows.push(`- ${name}: ${dates.join(", ")}`);
   }
 
   const in3 = new Date(now);
-  in3.setDate(in3.getDate() + 3);
+  in3.setUTCDate(in3.getUTCDate() + 3);
   const in7 = new Date(now);
-  in7.setDate(in7.getDate() + 7);
+  in7.setUTCDate(in7.getUTCDate() + 7);
 
   return `
 Fechas ya resueltas. NO calcules fechas vos ni supongas el día de la semana:
@@ -111,17 +115,19 @@ Tareas. Si vas a crear tareas, terminá tu respuesta con este bloque y NADA desp
 TASKS_ACTION:[{"title":"...","dueDate":"YYYY-MM-DD"}]
 
 Formato:
-- Solo esos dos campos. Los demás se completan solos; inventarlos rompe la creación.
-- Un objeto por tarea, sin saltos de línea ni comas de más.
-- Máximo 12 tareas. Si piden más (todos los días durante un mes), creá las 12 primeras.
-- NUNCA lo cortes a la mitad: si te falta lugar, emití menos tareas.
+- Siempre "title" y "dueDate". Opcionales: "kind", "time" y "repeat". Lo demás se completa solo; inventarlo rompe la creación.
+- "kind": "reminder" para una acción puntual de minutos (llamar, pagar, comprar), "task" para lo que lleva un rato, "project" para algo grande con fecha límite lejana (entrega, parcial, informe). Si dudás, omitilo.
+- "time": "HH:MM", SOLO si el usuario dijo una hora.
+- "repeat": SOLO si se repite. {"freq":"daily"|"weekly"|"monthly","interval":1,"weekdays":[3,6],"monthDay":5,"until":"YYYY-MM-DD"}. "weekdays" (0=domingo … 6=sábado) solo con weekly; "monthDay" solo con monthly; "interval" y "until" son opcionales. Un proyecto no se repite.
+- Una recurrencia es UN solo objeto con "repeat". NUNCA un objeto por cada vez: el sistema genera las ocurrencias solo. "dueDate" es desde cuándo empieza.
+- Un objeto por cada cosa distinta, sin saltos de línea ni comas de más.
+- Máximo 12 objetos. NUNCA lo cortes a la mitad: si te falta lugar, emití menos.
 Varias tareas van en el mismo array:
-TASKS_ACTION:[{"title":"Banco","dueDate":"${defaultDateExample}"},{"title":"Banco","dueDate":"${defaultDateExample}"}]
+TASKS_ACTION:[{"title":"Banco","dueDate":"${defaultDateExample}","kind":"reminder","time":"10:00"},{"title":"Gimnasio","dueDate":"${defaultDateExample}","repeat":{"freq":"weekly","weekdays":[3,6]}}]
 
 Cuándo usarlo:
 1. Si lo piden explícitamente ("agenda", "crea", "recuérdame", "cada martes").
 2. Si MENCIONAN algo que hay que hacer, sobre todo con fecha o plazo ("mañana rindo", "tengo que llamar al banco", "el viernes entrego").
-Recurrentes (cada semana, todos los martes): una tarea por ocurrencia, hasta 12.
 Nunca si es solo una pregunta o charla sin nada que hacer.
 
 Proponés, no creás (CRÍTICO):
@@ -132,10 +138,10 @@ Proponés, no creás (CRÍTICO):
 Proponé, no preguntes (CRÍTICO):
 - Si dicen algo que hay que hacer, poné la tarea en el bloque AHORA, en la misma respuesta. Preguntar NO reemplaza proponer.
 - Si no sabés la fecha, usá el default. No preguntes "¿para qué día?" ni "¿a qué hora?": después lo ajustan con un botón.
-- Si piden algo recurrente, creá las ocurrencias. No te excuses por "saturar la agenda" ni pidas permiso.
+- Si piden algo recurrente, proponé UNA tarea con "repeat". No te excuses por "saturar la agenda" ni pidas permiso.
 - Ante la duda, PROPONÉ: si sobra lo descartan con un clic; si falta, se perdió y el usuario cree que no lo escuchaste.
 - Si el mensaje trae varias cosas ("mañana cursar y gym miércoles y sábados"), incluí TODAS. No dejes ninguna afuera por concentrarte en la recurrente.
-- Ejemplos: "agendame llamar al banco" -> 1 tarea, sin preguntar el día. "gimnasio los miércoles y sábados" -> 8 tareas, sin preguntar nada. "tengo parcial el jueves" -> 1 tarea con la fecha del jueves.
+- Ejemplos: "agendame llamar al banco" -> 1 tarea, sin preguntar el día. "gimnasio los miércoles y sábados" -> 1 tarea con "repeat" weekly y "weekdays":[3,6], sin preguntar nada. "llamar a mamá todos los días a las 20" -> 1 recordatorio con "time":"20:00" y "repeat" daily. "pagar el alquiler el 5 de cada mes" -> 1 tarea con "repeat" monthly y "monthDay":5. "tengo parcial el jueves" -> 1 tarea con la fecha del jueves.
 - NUNCA inventes políticas o restricciones que no te di (por ejemplo, que no se pueden crear tareas diarias). No las tienes.`
       : `
 
@@ -161,7 +167,7 @@ export function buildTaskPromptParts({
 }: BuildContextOptions): TaskPromptParts {
   const today = isoDate(now);
   const sevenDaysLater = new Date(now);
-  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+  sevenDaysLater.setUTCDate(sevenDaysLater.getUTCDate() + 7);
   const defaultDate = isoDate(sevenDaysLater);
 
   const lines: string[] = [
@@ -200,8 +206,11 @@ Usa esto para personalizar tus respuestas cuando sea relevante, sin mencionar ex
     lines.push("\nTareas pendientes del usuario:");
     for (const task of shown) {
       const desc = task.description ? ` — ${task.description}` : "";
+      const kind = task.kind === "reminder" ? ", recordatorio" : task.kind === "project" ? ", proyecto" : "";
+      const at = task.time ? ` a las ${task.time}` : "";
+      const repeats = task.seriesId ? ", se repite" : "";
       lines.push(
-        `- [${task.priority.toUpperCase()}] ${task.title} (${task.category}) — vence: ${task.dueDate}, duración: ${task.duration}${desc}`
+        `- [${task.priority.toUpperCase()}] ${task.title} (${task.category}) — vence: ${task.dueDate}${at}, duración: ${task.estimateMin} min${kind}${repeats}${desc}`
       );
     }
     if (omitted > 0) {

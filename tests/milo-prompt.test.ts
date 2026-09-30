@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTaskContext, buildTaskPromptParts } from "@/lib/milo-chat-prompt";
+import { getZonedNow } from "@/lib/task-date";
 import type { Task } from "@/types/task";
 
 /**
@@ -15,15 +16,17 @@ const NOW = new Date("2026-03-11T14:30:00.000Z");
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
-    id: overrides.id ?? "t1",
-    title: overrides.title ?? "Llamar al banco",
+    id: "t1",
+    title: "Llamar al banco",
     description: "",
     category: "personal",
     priority: "medium",
-    dueDate: overrides.dueDate ?? "2026-03-12",
-    duration: "medium",
-    done: overrides.done ?? false,
-    completedAt: overrides.completedAt
+    dueDate: "2026-03-12",
+    estimateMin: 45,
+    kind: "task",
+    status: "pending",
+    done: false,
+    ...overrides
   };
 }
 
@@ -227,5 +230,112 @@ describe("buildTaskContext: the joined form", () => {
     expect(joined).toContain("TASKS_ACTION");
     expect(joined).toContain("Fecha de hoy: 2026-03-11");
     expect(joined).toContain("Llamar al banco");
+  });
+});
+
+describe("buildTaskPromptParts: recurrencias", () => {
+  const paid = () => buildTaskPromptParts({ canCreateTasks: true, now: NOW }).static;
+
+  it("le pide UNA tarea con repeat y ya no una por ocurrencia", () => {
+    const rules = paid();
+    expect(rules).toContain('"repeat"');
+    expect(rules).toContain("UN solo objeto");
+    expect(rules).toMatch(/NUNCA un objeto por cada vez/);
+    // La instrucción vieja, que fabricaba hasta 12 tareas por recurrencia.
+    expect(rules).not.toMatch(/una tarea por ocurrencia/i);
+    expect(rules).not.toMatch(/hasta 12\b/);
+    expect(rules).not.toMatch(/-> 8 tareas/);
+  });
+
+  it("explica los campos nuevos y la convención de weekdays", () => {
+    const rules = paid();
+    expect(rules).toContain('"kind"');
+    expect(rules).toContain('"time"');
+    expect(rules).toContain("0=domingo");
+    expect(rules).toMatch(/monthDay/);
+  });
+
+  it("trae los ejemplos que fijan el comportamiento", () => {
+    const rules = paid();
+    expect(rules).toContain('gimnasio los miércoles y sábados" -> 1 tarea');
+    expect(rules).toContain('"weekdays":[3,6]');
+    expect(rules).toContain('"repeat" daily');
+    expect(rules).toContain('"monthDay":5');
+  });
+
+  it("mantiene que se incluyan TODOS los ítems del mensaje", () => {
+    expect(paid()).toMatch(/incluí TODAS/);
+  });
+
+  it("el usuario Free no recibe nada de esto", () => {
+    const free = buildTaskPromptParts({ canCreateTasks: false, now: NOW }).static;
+    expect(free).not.toContain('"repeat"');
+    expect(free).not.toContain("TASKS_ACTION:[{");
+  });
+
+  it("sigue siendo idéntico entre usuarios: los ejemplos nuevos no filtran nada por usuario", () => {
+    const a = buildTaskPromptParts({ canCreateTasks: true, now: NOW });
+    const b = buildTaskPromptParts({ canCreateTasks: true, tasks: [task({ title: "Otra" })], userMemory: "x", now: NOW });
+    expect(a.static).toBe(b.static);
+  });
+});
+
+describe("buildTaskPromptParts: tipo, hora y minutos en la lista", () => {
+  it("muestra los minutos, no las categorías corta/media/larga", () => {
+    const { dynamic } = buildTaskPromptParts({
+      canCreateTasks: true,
+      tasks: [task({ estimateMin: 90 })],
+      now: NOW
+    });
+    expect(dynamic).toContain("duración: 90 min");
+    expect(dynamic).not.toMatch(/duración: (short|medium|long)/);
+  });
+
+  it("marca recordatorios, proyectos, horas y series", () => {
+    const { dynamic } = buildTaskPromptParts({
+      canCreateTasks: true,
+      tasks: [
+        task({ id: "a", title: "Pagar luz", kind: "reminder", time: "09:30" }),
+        task({ id: "b", title: "Tesis", kind: "project" }),
+        task({ id: "c", title: "Gimnasio", seriesId: "s1" })
+      ],
+      now: NOW
+    });
+    expect(dynamic).toMatch(/Pagar luz.*a las 09:30.*recordatorio/);
+    expect(dynamic).toMatch(/Tesis.*proyecto/);
+    expect(dynamic).toMatch(/Gimnasio.*se repite/);
+  });
+});
+
+describe("buildTaskPromptParts: hoy en la zona del usuario", () => {
+  // 01:30 UTC del martes 29: en Buenos Aires todavía es la noche del lunes 28.
+  const INSTANT = new Date("2026-09-29T01:30:00.000Z");
+
+  it("con la hora de pared del usuario, hoy es el día del usuario y no el de UTC", () => {
+    const now = getZonedNow("America/Argentina/Buenos_Aires", INSTANT);
+    const { dynamic } = buildTaskPromptParts({ canCreateTasks: true, now });
+    expect(dynamic).toContain('"hoy" = 2026-09-28');
+    expect(dynamic).toContain('"mañana" = 2026-09-29');
+    // 2026-09-28 es lunes: la fila del lunes arranca en esa fecha.
+    expect(dynamic).toContain("- lunes: 2026-09-28, 2026-10-05, 2026-10-12");
+  });
+
+  it("el mismo instante en UTC da el día siguiente", () => {
+    const { dynamic } = buildTaskPromptParts({ canCreateTasks: true, now: INSTANT });
+    expect(dynamic).toContain('"hoy" = 2026-09-29');
+  });
+
+  it("no depende de la zona del proceso: las fechas se arman con getters UTC", () => {
+    const original = process.env.TZ;
+    try {
+      const outputs = ["UTC", "America/Argentina/Buenos_Aires", "Asia/Tokyo"].map((tz) => {
+        process.env.TZ = tz;
+        return buildTaskPromptParts({ canCreateTasks: true, now: NOW }).dynamic;
+      });
+      expect(new Set(outputs).size).toBe(1);
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
   });
 });

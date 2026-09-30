@@ -72,8 +72,9 @@ describe("normalizeTaskAction", () => {
       category: "general",
       description: "",
       priority: "medium",
-      duration: "medium",
-      dueDate: "2026-10-07"
+      estimateMin: 45,
+      dueDate: "2026-10-07",
+      kind: "task"
     });
   });
 
@@ -89,6 +90,90 @@ describe("normalizeTaskAction", () => {
   it("rejects an out-of-range priority instead of trusting the model", () => {
     const result = normalizeTaskAction({ title: "Banco", priority: "urgentisimo" }, NOW);
     expect(result?.priority).toBe("medium");
+  });
+});
+
+describe("normalizeTaskAction: tipo, hora y repeat", () => {
+  it("conserva kind y time cuando son válidos", () => {
+    const result = normalizeTaskAction(
+      { title: "Llamar al banco", dueDate: "2026-10-01", kind: "reminder", time: "10:30" },
+      NOW
+    );
+    expect(result).toMatchObject({ kind: "reminder", time: "10:30", estimateMin: 5 });
+  });
+
+  it("un kind inválido se resuelve con las mismas reglas del formulario", () => {
+    const result = normalizeTaskAction(
+      { title: "Llamar al banco", dueDate: "2026-10-01", kind: "urgente", time: "10:30" },
+      NOW
+    );
+    expect(result?.kind).toBe("reminder");
+    expect(normalizeTaskAction({ title: "Estudiar", dueDate: "2026-10-01", kind: 5 }, NOW)?.kind).toBe("task");
+  });
+
+  it("una hora mal escrita se descarta sin perder la tarea", () => {
+    for (const time of ["25:00", "9:5", "mañana", 1030, null]) {
+      const result = normalizeTaskAction({ title: "Banco", dueDate: "2026-10-01", time }, NOW);
+      expect(result).not.toBeNull();
+      expect(result).not.toHaveProperty("time");
+    }
+  });
+
+  it("usa los minutos del modelo solo si son válidos", () => {
+    expect(normalizeTaskAction({ title: "x", estimateMin: 30 }, NOW)?.estimateMin).toBe(30);
+    expect(normalizeTaskAction({ title: "x", estimateMin: -5 }, NOW)?.estimateMin).toBe(45);
+    expect(normalizeTaskAction({ title: "x", duration: "long" }, NOW)?.estimateMin).toBe(45);
+  });
+
+  it("valida y normaliza repeat", () => {
+    const result = normalizeTaskAction(
+      { title: "Gimnasio", dueDate: "2026-09-30", repeat: { freq: "weekly", weekdays: [6, 3] } },
+      NOW
+    );
+    expect(result?.repeat).toEqual({ freq: "weekly", interval: 1, weekdays: [3, 6] });
+  });
+
+  it("un repeat inválido se descarta pero el ítem se conserva", () => {
+    for (const repeat of [
+      { freq: "cada tanto" },
+      { freq: "weekly", weekdays: [3, 9] },
+      { freq: "weekly", weekdays: ["miércoles"] },
+      { freq: "daily", interval: 0 },
+      { freq: "monthly", monthDay: 40 },
+      "todos los martes",
+      42
+    ]) {
+      const result = normalizeTaskAction({ title: "Gimnasio", dueDate: "2026-09-30", repeat }, NOW);
+      expect(result, JSON.stringify(repeat)).not.toBeNull();
+      expect(result?.title).toBe("Gimnasio");
+      expect(result).not.toHaveProperty("repeat");
+    }
+  });
+
+  it("un proyecto no se repite: se descarta el repeat, no el ítem", () => {
+    const result = normalizeTaskAction(
+      { title: "Tesis", dueDate: "2026-10-01", kind: "project", repeat: { freq: "daily" } },
+      NOW
+    );
+    expect(result?.kind).toBe("project");
+    expect(result).not.toHaveProperty("repeat");
+  });
+
+  it("un until anterior al inicio se quita, la serie queda", () => {
+    const result = normalizeTaskAction(
+      { title: "Gym", dueDate: "2026-10-10", repeat: { freq: "daily", until: "2026-10-01" } },
+      NOW
+    );
+    expect(result?.repeat).toEqual({ freq: "daily", interval: 1 });
+  });
+
+  it("un mensaje con una recurrencia y otras cosas propone todo, sin expandir", () => {
+    const result = parseTaskActions(
+      'Dale.\nTASKS_ACTION:[{"title":"Cursar","dueDate":"2026-09-29"},{"title":"Gimnasio","dueDate":"2026-09-30","repeat":{"freq":"weekly","weekdays":[3,6]}}]',
+      NOW
+    );
+    expect(result.taskActions).toHaveLength(2);
+    expect(result.taskActions[1].repeat).toEqual({ freq: "weekly", interval: 1, weekdays: [3, 6] });
   });
 });
 
