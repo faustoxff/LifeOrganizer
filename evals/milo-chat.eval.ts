@@ -90,12 +90,22 @@ if (!hasAnyProvider) {
   let quotaExhausted = false;
 
   /** The agenda a case's own tasks imply, so `get_schedule` and `plan_week` see what the prompt shows. */
-  const scheduleFor = (tasks: Task[]): ScheduleData => ({
+  const scheduleFor = (tasks: Task[], busy: NonNullable<EvalCase["busy"]> = [], now: Date = NOW): ScheduleData => ({
     tasks,
     sessions: [],
     availability: DEFAULT_AVAILABILITY,
     overrides: {},
-    inflation: 1
+    inflation: 1,
+    timeZone: "UTC",
+    busyBlocks: busy.map((b, index) => ({
+      id: `eval:${index}`,
+      title: b.title,
+      source: b.source,
+      importance: b.importance ?? "normal",
+      prepMin: b.prepMin ?? 0,
+      start: new Date(now.getTime() + b.startsInMin * 60_000).toISOString(),
+      end: new Date(now.getTime() + (b.startsInMin + b.durationMin) * 60_000).toISOString()
+    }))
   });
 
   /** Whether this case runs through tools, exactly as the route decides it. */
@@ -117,6 +127,7 @@ if (!hasAnyProvider) {
     usage: number;
     via: "tools" | "legacy";
     toolsUsed: string[];
+    toolCalls: Array<{ name: string; arguments: string }>;
     asked: boolean;
     proposalDays: number;
     weekStart: string | null;
@@ -159,7 +170,7 @@ if (!hasAnyProvider) {
         userMessage: testCase.message,
         turn: { factCalls: 0 },
         facts,
-        load: async () => scheduleFor(testCase.tasks ?? [])
+        load: async () => scheduleFor(testCase.tasks ?? [], testCase.busy, now)
       };
       const result = await runMiloAgent({
         message: testCase.message,
@@ -178,6 +189,7 @@ if (!hasAnyProvider) {
         usage: promptTokens * result.rounds + Math.round(result.text.length / 3.8) + 250 * result.rounds,
         via: "tools",
         toolsUsed: result.toolsUsed,
+        toolCalls: result.toolCalls,
         asked: result.toolsUsed.includes("ask_user"),
         proposalDays: result.proposal ? new Set(result.taskActions.map((t) => t.dueDate)).size : 0,
         weekStart: result.proposal?.weekStart ?? null,
@@ -203,6 +215,7 @@ if (!hasAnyProvider) {
       usage: promptTokens + Math.round(content.length / 3.8) + 250,
       via: "legacy",
       toolsUsed: [],
+      toolCalls: [],
       asked: false,
       proposalDays: 0,
       weekStart: null,
@@ -278,6 +291,24 @@ if (!hasAnyProvider) {
       }
       if (e.tool && !out.toolsUsed.includes(e.tool)) {
         fail(`expected tool ${e.tool}, got tools=[${out.toolsUsed.join(", ")}]`);
+      }
+      if (e.nowArgs) {
+        const call = out.toolCalls.find((c) => c.name === "what_should_i_do_now");
+        let args: Record<string, unknown> = {};
+        try { args = call ? (JSON.parse(call.arguments) as Record<string, unknown>) : {}; } catch { /* argumentos rotos: cuentan como ausentes */ }
+        const want = e.nowArgs;
+        if (want.availableMin !== undefined) {
+          const got = args.availableMin;
+          if (want.availableMin === "absent" ? got !== undefined && got !== null : got !== want.availableMin) {
+            fail(`what_should_i_do_now: expected availableMin ${want.availableMin === "absent" ? "absent (the user did not say how long)" : want.availableMin}, got ${JSON.stringify(got)}`);
+          }
+        }
+        if (want.energy !== undefined) {
+          const got = args.energy;
+          if (want.energy === "absent" ? got !== undefined && got !== null : got !== want.energy) {
+            fail(`what_should_i_do_now: expected energy ${want.energy}, got ${JSON.stringify(got)}`);
+          }
+        }
       }
       if (e.distinctDays !== undefined && out.proposalDays < e.distinctDays) {
         fail(`expected the week spread over at least ${e.distinctDays} days, got ${out.proposalDays}`);

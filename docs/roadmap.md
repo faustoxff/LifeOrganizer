@@ -705,3 +705,14 @@ dicho usa la ventana libre calculada.
   los minutos de disponibilidad de hoy.
 - Las tareas de proyecto compiten por sus **sesiones de hoy** (con su duración), no por la fila del
   proyecto.
+- **Corrección manual** (chips y "Estoy cansado"): vale 60 minutos o hasta que cambie la situación frente al
+  compromiso (llegó otro bloque o el próximo ya empezó). "Más" son 2 h, siempre cortadas por el próximo
+  compromiso real y por la medianoche; se puede dar más que la disponibilidad del día (la corrige).
+- **`GET /api/busy`** devuelve solo lo que aportan las fuentes externas (hoy nada); los recordatorios y las
+  tareas con hora el cliente ya los tiene y arma sus bloques con la misma función pura.
+- **Margen por usuario**: dos valores (eventos de calendario, recordatorios y tareas con hora), en el diálogo
+  de disponibilidad; se guardan al cambiarlos. El de eventos solo se usa cuando haya una fuente de calendario.
+- **Sin hora en el scheduler**: el scheduler de proyectos y `plan_week` reparten por día, no eligen una hora.
+  "No agendar encima de un bloque" ahí significa restarle el bloque (y su margen) a la capacidad de su día;
+  el solape a nivel de hora solo lo evita la recomendación.
+- Evals: 4 casos `ahora` (tiempo dicho, evento cerca, cansado, nada pendiente).

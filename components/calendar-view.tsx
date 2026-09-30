@@ -4,18 +4,19 @@ import { canFocusTask } from "@/lib/focus-eligibility";
 import Image from "next/image";
 import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Play, Repeat, SlidersHorizontal, Trash2, Sparkles } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Play, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useAppLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
-import { MiloLoader } from "@/components/milo-loader";
 import { cn } from "@/lib/utils";
 import { formatDueDate, getDueDateLabel } from "@/lib/task-date";
-import { getTaskDurationLabel, getTaskPriorityLabel } from "@/lib/task-labels";
+import { getTaskDurationLabel } from "@/lib/task-labels";
 import { getTodayReminders, isFutureOccurrence, isRecommendable, isVisibleInToday } from "@/lib/task-views";
 import { emptyStateCopy, focusCopy, monthCopy, quickAddCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { Input } from "@/components/ui/input";
-import { AiPriorityRecommendation } from "@/types/ai-priority";
+import { NowCard } from "@/components/now-card";
+import { PriorityPill } from "@/components/priority-pill";
+import type { NowView } from "@/lib/use-now";
 import { Task } from "@/types/task";
 
 // Weekday / month names come from Intl so they follow the app language.
@@ -65,8 +66,9 @@ function getCalendarDays(year: number, month: number) {
 type CalendarViewProps = {
   allTasks: Task[];
   isMutating: boolean;
-  aiRecommendation: AiPriorityRecommendation | null;
-  isAiLoading: boolean;
+  /** Qué hacer ahora (Plus/Pro). null = sin tarjeta. */
+  now: NowView | null;
+  onStartSession: (subtaskId: string) => void;
   onAddTask: () => void;
   onDeleteTask: (id: string) => Promise<void>;
   onEditTask: (id: string) => void;
@@ -89,8 +91,8 @@ type CalendarViewProps = {
 export function CalendarView({
   allTasks,
   isMutating,
-  aiRecommendation,
-  isAiLoading,
+  now,
+  onStartSession,
   onAddTask,
   onDeleteTask,
   onEditTask,
@@ -106,7 +108,6 @@ export function CalendarView({
   extraPending = 0
 }: CalendarViewProps) {
   const { language, copy } = useAppLanguage();
-  const focusT = focusCopy[language];
   const quickT = quickAddCopy[language];
   const [quickTitle, setQuickTitle] = useState("");
   const emptyT = emptyStateCopy[language];
@@ -155,10 +156,9 @@ export function CalendarView({
   const todayReminders = useMemo(() => getTodayReminders(allTasks, todayKey), [allTasks, todayKey]);
   const todayReminderIds = useMemo(() => new Set(todayReminders.map((t) => t.id)), [todayReminders]);
 
-  // Reminders never compete as "the" recommended task, even if the AI names one.
-  const recommendedTask = aiRecommendation
-    ? allTasks.find((t) => t.id === aiRecommendation.recommendedTaskId && isRecommendable(t, todayKey))
-    : null;
+  // The task the card recommends right now (reminders never compete, and a rest/prepare card has none).
+  const recommendedId = now?.current.type === "task" ? now.current.task.id : null;
+  const recommendedTask = recommendedId ? allTasks.find((t) => t.id === recommendedId && isRecommendable(t, todayKey)) ?? null : null;
 
   // Pending first (soonest due date first); completed ones after, most recent first.
   const byDueAsc = (a: Task, b: Task) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0);
@@ -320,80 +320,21 @@ export function CalendarView({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* AI recommendation — the star of the screen */}
-        {(recommendedTask || isAiLoading) && (
+        {/* What to do right now — the star of the screen */}
+        {now && (
           <div className="px-5 pt-3">
-            {isAiLoading ? (
-              <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
-                <MiloLoader />
-                <span>{copy.calendar.analyzingTasks}</span>
-              </div>
-            ) : recommendedTask ? (
-              <motion.div
-                key={recommendedTask.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/20 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-widest text-primary">
-                    <Sparkles className="h-3 w-3" />
-                    IA
-                  </span>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-primary/90">
-                    {copy.calendar.todayRecommendation}
-                  </p>
-                </div>
-                <p className="mt-2 text-lg font-semibold leading-snug tracking-tight sm:text-xl">
-                  {recommendedTask.title}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>{recommendedTask.category}</span>
-                  <span>·</span>
-                  <span>{getDueDateLabel(recommendedTask.dueDate, language)}</span>
-                  <PriorityPill priority={recommendedTask.priority} language={language} />
-                </div>
-                {aiRecommendation?.recommendationReason && (
-                  <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-foreground/80">
-                    {aiRecommendation.recommendationReason}
-                  </p>
-                )}
-                {recommendedTask.steps && recommendedTask.steps.length > 0 && (
-                  <p className="mt-2 text-xs font-medium text-primary/90">
-                    {recommendedTask.steps.filter((s) => s.done).length}/{recommendedTask.steps.length} ·{" "}
-                    {recommendedTask.steps.find((s) => !s.done)?.text ?? copy.taskList.completed}
-                  </p>
-                )}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {canFocusTask(recommendedTask) && (
-                    <Button size="sm" onClick={() => onFocusTask(recommendedTask.id)} className="gap-1.5">
-                      <Play className="h-4 w-4" />
-                      {focusT.focus}
-                    </Button>
-                  )}
-                  {!recommendedTask.steps?.length && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5"
-                      disabled={breakingDownTaskId === recommendedTask.id}
-                      onClick={() => onBreakDown(recommendedTask.id)}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      {breakingDownTaskId === recommendedTask.id ? focusT.breaking : focusT.breakDown}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" disabled={isMutating} onClick={() => void onToggleTask(recommendedTask.id)} className="gap-1.5">
-                    <CheckCircle2 className="h-4 w-4" />
-                    {copy.taskList.markDone}
-                  </Button>
-                  <Button size="sm" variant="ghost" disabled={isMutating} onClick={() => onEditTask(recommendedTask.id)}>
-                    {copy.taskList.edit}
-                  </Button>
-                </div>
-              </motion.div>
-            ) : null}
+            <NowCard
+              view={now}
+              allTasks={allTasks}
+              isMutating={isMutating}
+              breakingDownTaskId={breakingDownTaskId}
+              onFocusTask={onFocusTask}
+              onBreakDown={onBreakDown}
+              onToggleTask={onToggleTask}
+              onEditTask={onEditTask}
+              onStartSession={onStartSession}
+              renderTaskExtra={renderTaskExtra}
+            />
           </div>
         )}
 
@@ -720,22 +661,6 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
     </motion.li>
   );
 }
-
-function PriorityPill({ priority, language }: { priority: Task["priority"]; language: import("@/lib/i18n").AppLanguage }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-        priority === "high" && "bg-red-500/15 text-red-400",
-        priority === "medium" && "bg-amber-500/15 text-amber-400",
-        priority === "low" && "bg-muted/60 text-muted-foreground"
-      )}
-    >
-      {getTaskPriorityLabel(priority, language)}
-    </span>
-  );
-}
-
 
 // Height/opacity transition so content unfolds instead of popping in.
 function Collapsible({ open, children }: { open: boolean; children: ReactNode }) {

@@ -292,6 +292,10 @@ describe("chips manuales", () => {
     expect(isChoiceValid(choice, w, new Date(NOW.getTime() + MANUAL_MAX_AGE_MIN * 60_000))).toBe(false);
     // cambió el próximo bloque
     expect(isChoiceValid(choice, windowFor([blockIn(90, { id: "otro" })]), NOW)).toBe(false);
+    // el próximo bloque ya empezó: ya es otra situación
+    const later = new Date(NOW.getTime() + 100 * 60_000);
+    const inside = getFreeWindow({ now: later, blocks: [blockIn(90, { id: "cal" })], timeZone: BA, dayCapacityMin: 600 });
+    expect(isChoiceValid({ setAt: later.getTime() - 60_000, blockKey: blockKeyOf(w) }, inside, later)).toBe(false);
     expect(isChoiceValid(choice, windowFor([]), NOW)).toBe(false);
     expect(isChoiceValid(null, w, NOW)).toBe(false);
   });

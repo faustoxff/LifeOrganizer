@@ -116,7 +116,12 @@ export type Expectation = {
 
   // ---- Solo camino de tools. En el modo legacy estos chequeos se saltean. ----
   /** Esta tool tiene que haberse usado (y se ejecutó sin error). */
-  tool?: "create_items" | "plan_week" | "get_schedule" | "ask_user";
+  tool?: "create_items" | "plan_week" | "get_schedule" | "ask_user" | "what_should_i_do_now";
+  /**
+   * Con `what_should_i_do_now`: qué argumentos tiene que haber mandado. `"absent"` = no puede
+   * inventar el dato (si el usuario no dijo cuánto tiempo tiene, no se pasa availableMin).
+   */
+  nowArgs?: { availableMin?: number | "absent"; energy?: "tired" | "absent" };
   /** Milo tiene que preguntar con ask_user y no proponer nada: falta un dato necesario. */
   askUser?: boolean;
   /** La propuesta semanal tiene que repartirse en al menos esta cantidad de días distintos. */
@@ -153,6 +158,8 @@ export type EvalCase = {
   now?: Date;
   /** Ítems de una propuesta pendiente de confirmar, como los manda el cliente. */
   pending?: TaskInput[];
+  /** Compromisos ya agendados: empiezan `startsInMin` minutos después de NOW. Para `what_should_i_do_now`. */
+  busy?: Array<{ title: string; startsInMin: number; durationMin: number; source: "reminder" | "calendar" | "manual"; importance?: "low" | "normal" | "high"; prepMin?: number }>;
   /** El caso solo tiene sentido con tools (por ejemplo, ask_user). En modo legacy se saltea. */
   toolsOnly?: boolean;
   /** Cases here are inherently fuzzy; excluded from the strict pass rate. */
@@ -513,6 +520,40 @@ export const CASES: EvalCase[] = [
     name: "memoria: pide que le recuerde algo sensible y Milo explica que no lo guarda",
     message: "acordate de que tomo pastillas para la presión",
     expectation: { tasks: "none", savesNoFact: true, maxChars: 500 },
+    toolsOnly: true
+  },
+
+
+  // ------------------------------------------------------------------ qué hago ahora
+  // `what_should_i_do_now` decide con el tiempo libre: Milo tiene que usarla (no elegir de la lista por su cuenta),
+  // pasar solo lo que el usuario dijo, y contar lo que devuelve sin inventar tareas.
+  {
+    name: "ahora: dice cuánto tiempo tiene",
+    message: "tengo media hora libre, ¿qué hago?",
+    tasks: sampleTasks(),
+    expectation: { tasks: "none", tool: "what_should_i_do_now", nowArgs: { availableMin: 30, energy: "absent" }, maxChars: 500 },
+    toolsOnly: true
+  },
+  {
+    name: "ahora: hay un evento cerca y no dice tiempo",
+    message: "¿qué hago ahora?",
+    busy: [{ title: "Cumpleaños de Sofi", startsInMin: 40, durationMin: 180, source: "calendar", importance: "high", prepMin: 15 }],
+    tasks: sampleTasks(),
+    expectation: { tasks: "none", tool: "what_should_i_do_now", nowArgs: { availableMin: "absent" }, mentions: ["cumpleaños"], maxChars: 500 },
+    toolsOnly: true
+  },
+  {
+    name: "ahora: está cansado",
+    message: "estoy re cansado, no tengo ganas de nada. ¿qué hago?",
+    tasks: sampleTasks(),
+    expectation: { tasks: "none", tool: "what_should_i_do_now", nowArgs: { energy: "tired" }, maxChars: 500 },
+    toolsOnly: true
+  },
+  {
+    name: "ahora: no tiene nada pendiente",
+    message: "¿qué hago ahora?",
+    tasks: [],
+    expectation: { tasks: "none", tool: "what_should_i_do_now", nowArgs: { availableMin: "absent", energy: "absent" }, maxChars: 400 },
     toolsOnly: true
   },
 

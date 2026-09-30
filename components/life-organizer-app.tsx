@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BarChart3, Bell, Brain, Clock, LogOut, Zap, X, ArrowUpRight, ListChecks, MessageCircle, PanelLeft } from "lucide-react";
 import { AvailabilityDialog } from "@/components/availability-dialog";
@@ -35,7 +35,7 @@ import { useReminders } from "@/lib/use-reminders";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
-import { AiPriorityApiResponse, AiPriorityRecommendation } from "@/types/ai-priority";
+import { useNow, type NowSession } from "@/lib/use-now";
 import type { ProjectView } from "@/types/project";
 import { Task, TaskInput, TaskStep } from "@/types/task";
 
@@ -60,8 +60,6 @@ export function LifeOrganizerApp() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [storageError, setStorageError] = useState("");
   const [taskLimitReached, setTaskLimitReached] = useState(false);
-  const [aiRecommendation, setAiRecommendation] = useState<AiPriorityRecommendation | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   // Projects: the plans the scheduler keeps for the user, and what is open on top of them.
@@ -128,7 +126,6 @@ export function LifeOrganizerApp() {
     }
   }
 
-  const aiRecommendationCacheRef = useRef(new Map<string, AiPriorityRecommendation>());
   const todayLabel = formatTodayLongDate(language);
 
   // The browser's timezone travels with every load: the server stores it and
@@ -257,72 +254,36 @@ export function LifeOrganizerApp() {
   // work; a plan that is running late weighs more.
   const todaySessions = useMemo(() => getTodaySessions(projects, today), [projects, today]);
 
-  const aiRequestTasks = useMemo(() =>
-    [
-      ...pendingTasks.map(({ id, title, category, description, priority, estimateMin, dueDate }) =>
-        ({ id, title, category, description, priority, estimateMin, dueDate })
-      ),
-      ...todaySessions.map(({ session, subtask, project }) => ({
-        id: `session:${subtask.id}`,
+  // "Qué hago ahora": la recomendación sale de lib/recommendation.ts (tiempo libre, compromisos, lo que
+  // vence, cómo tarda el usuario). Ya no depende de la IA, así que no gasta cupo. Sigue siendo Plus/Pro.
+  const nowSessions = useMemo<NowSession[]>(
+    () =>
+      todaySessions.map(({ session, subtask, project }) => ({
+        subtaskId: subtask.id,
         title: `${project.task.title}: ${subtask.title}`,
-        category: "project",
-        description: "",
-        priority: (project.plan && (!project.plan.feasible || project.plan.bufferConsumedPct > 50) ? "high" : "medium") as Task["priority"],
-        estimateMin: session.minutes,
-        dueDate: project.task.dueDate
-      }))
-    ].sort((a, b) => a.id.localeCompare(b.id)),
-    [pendingTasks, todaySessions]
+        minutes: session.minutes,
+        deadline: project.task.dueDate,
+        late: Boolean(project.plan && (!project.plan.feasible || project.plan.bufferConsumedPct > 50))
+      })),
+    [todaySessions]
   );
-  const recommendedSubtaskId = aiRecommendation?.recommendedTaskId.startsWith("session:")
-    ? aiRecommendation.recommendedTaskId.slice("session:".length)
-    : null;
+  const nowPatterns = usePatterns(showForm || plan !== "free");
+  const now = useNow({
+    enabled: isLoaded && plan !== "free",
+    tasks: pendingTasks,
+    allTasks: visibleTasks,
+    sessions: nowSessions,
+    availability: availability?.values ?? DEFAULT_AVAILABILITY,
+    patterns: nowPatterns,
+    today
+  });
+  const recommendedSubtaskId =
+    now?.current.type === "task" && now.current.task.id.startsWith("session:") ? now.current.task.id.slice("session:".length) : null;
   const projectProgress = useMemo(
     () => Object.fromEntries(projects.map((p) => [p.task.id, p.progress])),
     [projects]
   );
   const detailProject = detailProjectId ? projects.find((p) => p.task.id === detailProjectId) ?? null : null;
-
-  const aiRequestKey = useMemo(() =>
-    JSON.stringify({ language, tasks: aiRequestTasks }),
-    [aiRequestTasks, language]
-  );
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (aiRequestTasks.length === 0) { setAiRecommendation(null); setIsAiLoading(false); return; }
-
-    const cached = aiRecommendationCacheRef.current.get(aiRequestKey);
-    if (cached) { setAiRecommendation(cached); setIsAiLoading(false); return; }
-
-    setAiRecommendation(null);
-    setIsAiLoading(true);
-    const ctrl = new AbortController();
-
-    async function loadRec() {
-      try {
-        const res = await fetch("/api/ai-priority", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tasks: aiRequestTasks, uiLanguage: language }),
-          signal: ctrl.signal
-        });
-        const data = (await res.json()) as AiPriorityApiResponse;
-        if (data.enabled && data.recommendation) {
-          aiRecommendationCacheRef.current.set(aiRequestKey, data.recommendation);
-          setAiRecommendation(data.recommendation);
-        } else {
-          setAiRecommendation(null);
-        }
-      } catch {
-        if (!ctrl.signal.aborted) setAiRecommendation(null);
-      } finally {
-        if (!ctrl.signal.aborted) setIsAiLoading(false);
-      }
-    }
-    void loadRec();
-    return () => ctrl.abort();
-  }, [aiRequestKey, aiRequestTasks, isLoaded, language]);
 
   const reminders = useReminders(todayTasks, language, isLoaded, user.id);
 
@@ -337,7 +298,7 @@ export function LifeOrganizerApp() {
     setNotifPermission(await Notification.requestPermission());
   }, []);
   // La pista de "solés tardar ~N" solo hace falta con el formulario abierto.
-  const patterns = usePatterns(showForm);
+  const patterns = nowPatterns;
   const checklists = useChecklists({
     tasks,
     plan,
@@ -883,8 +844,11 @@ export function LifeOrganizerApp() {
           <CalendarView
             allTasks={visibleTasks}
             isMutating={isSyncing}
-            aiRecommendation={aiRecommendation}
-            isAiLoading={isAiLoading}
+            now={now}
+            onStartSession={(subtaskId) => {
+              const item = todaySessions.find((entry) => entry.subtask.id === subtaskId);
+              if (item) setFocusSession(item);
+            }}
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
             onEditTask={handleEditTask}

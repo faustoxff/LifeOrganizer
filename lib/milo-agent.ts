@@ -50,6 +50,8 @@ export type AgentResult = {
   factProposals: FactProposal[];
   /** Nombres de las tools que se ejecutaron, en orden. Para logs y evals. */
   toolsUsed: string[];
+  /** Lo mismo con los argumentos que mandó el modelo (para evals: ¿pasó el tiempo que dijo el usuario?). */
+  toolCalls: { name: string; arguments: string }[];
   rounds: number;
   provider: string;
   model: string;
@@ -78,6 +80,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
   const factsSaved: SavedFact[] = [];
   const factProposals: FactProposal[] = [];
   const toolsUsed: string[] = [];
+  const toolCalls: { name: string; arguments: string }[] = [];
   let provider = "";
   let model = "";
   // Después de proponer, la próxima ronda solo tiene que escribir la respuesta.
@@ -91,6 +94,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
     factsSaved,
     factProposals,
     toolsUsed,
+    toolCalls,
     rounds,
     provider,
     model
@@ -140,6 +144,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
       messages.push({ role: "tool", toolCallId: call.id, content: outcome.content });
       if (outcome.isError) continue;
       toolsUsed.push(call.name);
+      toolCalls.push({ name: call.name, arguments: call.arguments });
 
       const effect = outcome.effect;
       if (effect?.ask) asked = effect.ask;

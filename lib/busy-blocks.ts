@@ -222,9 +222,13 @@ export function getFreeWindow({ now, blocks, timeZone, dayCapacityMin }: FreeWin
   };
 }
 
-/** Contra qué bloque se hizo una corrección manual: si cambia, la corrección ya no vale. */
+/**
+ * Contra qué se hizo una corrección manual: el próximo bloque, o el bloque en el que ya está metido. Si
+ * cambia (llegó otro bloque, o el próximo ya empezó), la corrección ya no vale.
+ */
 export function blockKeyOf(window: Pick<FreeWindow, "currentBlock" | "nextBlock">): string | null {
-  return window.currentBlock?.id ?? window.nextBlock?.id ?? null;
+  if (window.currentBlock) return `in:${window.currentBlock.id}`;
+  return window.nextBlock ? `next:${window.nextBlock.id}` : null;
 }
 
 // ---------------------------------------------------------------------------

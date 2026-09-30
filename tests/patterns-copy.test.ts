@@ -41,9 +41,11 @@ describe("texto de los patrones (es/en)", () => {
 describe("el modo foco solo se ofrece donde tiene sentido (la UI usa la misma regla)", () => {
   const calendar = readFileSync("components/calendar-view.tsx", "utf8");
 
-  it("los dos botones de foco de la vista del calendario pasan por canFocusTask", () => {
+  it("el botón de foco de la fila y el de la tarjeta de 'ahora' pasan por canFocusTask", () => {
+    const card = readFileSync("components/now-card.tsx", "utf8");
     expect(calendar).toMatch(/import \{ canFocusTask \}/);
-    expect(calendar.match(/canFocusTask\(/g)).toHaveLength(2);
+    expect(calendar.match(/canFocusTask\(/g)).toHaveLength(1);
+    expect(card.match(/canFocusTask\(/g)).toHaveLength(1);
     // La regla vieja (todo lo que no sea proyecto) no puede volver.
     expect(calendar).not.toMatch(/!task\.done && task\.kind !== "project" && \(\s*<button\s+onClick=\{onFocus\}/);
   });
