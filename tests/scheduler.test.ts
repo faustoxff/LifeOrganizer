@@ -197,6 +197,20 @@ describe("subtareas largas", () => {
     expect(of(out.sessions, "x").map((s) => [s.date, s.minutes])).toEqual([[MON, 30], [TUE, 30]]);
   });
 
+  it("con poco lugar por día, la última sesión puede quedar chica en vez de trabar la subtarea", () => {
+    // 35 min con 30 por día: 30 + 5. Exigir que la última llegue al mínimo la dejaba
+    // imposible de agendar para siempre.
+    const flat = Object.fromEntries(Object.keys(DEFAULT_AVAILABILITY).map((k) => [k, 30])) as typeof DEFAULT_AVAILABILITY;
+    const out = schedule(input([project("p", "2026-10-30", [sub("x", 35)])], { availability: flat }));
+    expect(out.perProject.p.feasible).toBe(true);
+    expect(of(out.sessions, "x").map((s) => s.minutes)).toEqual([30, 5]);
+  });
+
+  it("y aun así rebalancea cuando hay lugar para que la última no quede diminuta", () => {
+    const out = schedule(input([project("p", "2026-10-30", [sub("x", 105)])], { params: { inflation: 1 } }));
+    expect(of(out.sessions, "x").map((s) => s.minutes)).toEqual([85, 20]);
+  });
+
   it("respeta minSessionMin y maxSessionMin configurados", () => {
     const out = schedule(input([project("p", "2026-10-30", [sub("x", 100)])], { params: { inflation: 1, maxSessionMin: 40, minSessionMin: 15 } }));
     const sessions = of(out.sessions, "x");

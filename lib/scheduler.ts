@@ -468,17 +468,25 @@ type CoreResult = {
  * Cuánto agendar hoy de una subtarea a la que le faltan `remaining` minutos y
  * hoy hay `room` de lugar. 0 = no entra hoy.
  *
- * Si parte la subtarea, ninguna sesión puede quedar bajo el mínimo salvo la
- * última; si la parte que sobraría fuera menor que el mínimo, se le quita a esta
- * sesión lo necesario para que la última no quede diminuta.
+ * Si parte la subtarea, ninguna sesión puede quedar bajo el mínimo salvo la última.
+ * Cuando el resto que sobraría es menor que el mínimo, se prefiere quitarle a esta
+ * sesión lo necesario para que la última no quede diminuta, pero solo si esa sesión
+ * más chica sigue cabiendo. Si no cabe, se deja que la última sea la chica: es lo
+ * que el diseño permite, y exigir otra cosa dejaba una subtarea de 35 min imposible
+ * de agendar para siempre con 30 min por día.
  */
 function pickAmount(remaining: number, room: number, params: SchedulerParams): number {
   let amount = Math.min(remaining, room, params.maxSessionMin);
   if (amount <= 0) return 0;
   if (amount === remaining) return amount;
+  if (amount < params.minSessionMin) return 0;
 
-  if (remaining - amount < params.minSessionMin) amount = remaining - params.minSessionMin;
-  return amount >= params.minSessionMin ? amount : 0;
+  const rest = remaining - amount;
+  if (rest < params.minSessionMin) {
+    const balanced = remaining - params.minSessionMin;
+    if (balanced >= params.minSessionMin && balanced <= amount) amount = balanced;
+  }
+  return amount;
 }
 
 /**

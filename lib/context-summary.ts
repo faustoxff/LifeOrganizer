@@ -78,17 +78,26 @@ async function summarizeOne(text: string, budget: number, summarize: Summarize):
   return reduce(partials, budget, summarize);
 }
 
-/** El resumen de contexto de un proyecto a partir de los textos de sus archivos. */
-export async function buildContextSummary(files: SourceFile[], summarize: Summarize): Promise<string> {
+/**
+ * El resumen de contexto de un proyecto a partir de los textos de sus archivos.
+ *
+ * `totalBudget` es lo que le toca a este grupo: si los archivos se suben de a uno (un
+ * request por archivo), cada llamada recibe su parte del presupuesto total del proyecto.
+ */
+export async function buildContextSummary(
+  files: SourceFile[],
+  summarize: Summarize,
+  totalBudget: number = TOTAL_BUDGET
+): Promise<string> {
   const usable = files.filter((f) => f.text.trim().length > 0);
   if (usable.length === 0) return "";
 
   // Each file keeps its heading, which is not free.
-  const budget = Math.floor(TOTAL_BUDGET / usable.length) - 40;
+  const budget = Math.floor(totalBudget / usable.length) - 40;
   const sections: string[] = [];
   for (const file of usable) {
     const body = await summarizeOne(file.text.trim(), Math.max(200, budget), summarize);
     sections.push(`## ${file.name.slice(0, 60)}\n${body}`);
   }
-  return clip(sections.join("\n\n"), TOTAL_BUDGET);
+  return clip(sections.join("\n\n"), totalBudget);
 }

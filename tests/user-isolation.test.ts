@@ -32,7 +32,7 @@ describe("database access", () => {
   it("scopes every series, subtask and settings query to the owner", () => {
     // Series and occurrences are the newest place a task can leak across
     // accounts: a series id or a task id from another user must find nothing.
-    for (const path of ["lib/series-storage.ts", "lib/user-settings.ts"]) {
+    for (const path of ["lib/series-storage.ts", "lib/user-settings.ts", "lib/projects-storage.ts"]) {
       const statements = read(path).match(/sql`[\s\S]*?`/g) ?? [];
       expect(statements.length).toBeGreaterThan(0);
       for (const statement of statements) {
@@ -99,10 +99,29 @@ describe("API routes", () => {
       // provider's HMAC over the raw body. Mercado Pago used its own SDK
       // validator; Lemon Squeezy uses the one in lib/lemonsqueezy.ts. Either
       // way the route must contain a signature check, never neither.
+      // The project routes authenticate through lib/project-route.ts, checked below.
       const guarded =
         /requireAuth(WithEmail)?\s*\(/.test(source) ||
+        /\bauthenticate\s*\(/.test(source) ||
         /WebhookSignatureValidator|verifyWebhookSignature/.test(source);
       expect(guarded, `${route} has no identity check`).toBe(true);
+    }
+  });
+});
+
+describe("project routes", () => {
+  it("authenticate() really is requireAuth", () => {
+    expect(read("lib/project-route.ts")).toMatch(/requireAuth\s*\(/);
+  });
+
+  it("every project route authenticates before doing anything else", () => {
+    for (const route of apiRoutes().filter((r) => r.includes("api/projects"))) {
+      const source = read(route);
+      expect(source, `${route} never authenticates`).toMatch(/authenticate\s*\(/);
+      // The check has to come first in each handler, not after a database read.
+      for (const handler of source.split(/export async function /).slice(1)) {
+        expect(handler, `${route}: a handler reads before it authenticates`).toMatch(/^[A-Z]+\(request(: Request)?\)\s*\{\s*const auth = await authenticate\(\)/);
+      }
     }
   });
 });
