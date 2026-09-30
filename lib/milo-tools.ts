@@ -1,3 +1,6 @@
+import { busyLoads, formatLocalTime, getFreeWindow, type BusyBlock } from "@/lib/busy-blocks";
+import { nowCopy, reasonLine, windowLine } from "@/lib/now-copy";
+import { getRecommendations, sessionCandidate, withAvailableMinutes, type Recommendation } from "@/lib/recommendation";
 import { adjustedEstimate, normalizeCategory, type UserPatterns } from "@/lib/user-patterns";
 import type { Availability, AvailabilityOverrides } from "@/lib/availability";
 import { capacityOn } from "@/lib/availability";
@@ -179,7 +182,21 @@ export const GET_MY_PATTERNS: ToolSpec = {
   }
 };
 
-export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS];
+export const WHAT_SHOULD_I_DO_NOW: ToolSpec = {
+  name: "what_should_i_do_now",
+  description:
+    "Qué le conviene hacer AHORA al usuario, según cuánto tiempo libre tiene hasta su próximo compromiso y lo que tiene pendiente. Usala cuando pregunte qué hacer, por dónde empezar o qué hacer con un rato libre (\"tengo media hora, ¿qué hago?\", \"¿qué hago ahora?\", \"estoy cansado, ¿qué hago?\"). Si el usuario dijo cuánto tiempo tiene, pasalo en availableMin; si no, no lo pases: el servidor usa su ventana libre real. La elección la hace el servidor: contá lo que devuelve, no elijas otra cosa.",
+  parameters: {
+    type: "object",
+    properties: {
+      availableMin: { type: "integer", description: "Minutos que dijo tener (\"media hora\" = 30, \"una hora\" = 60). Omitilo si no lo dijo." },
+      energy: { type: "string", enum: ["tired"], description: "\"tired\" si dijo que está cansado, sin ganas o agotado. Omitilo si no." }
+    },
+    required: []
+  }
+};
+
+export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS, WHAT_SHOULD_I_DO_NOW];
 
 /** Cuántos hechos puede tocar Milo en un mismo turno: un tope contra un modelo que "recuerda" todo. */
 export const MAX_FACT_CALLS_PER_TURN = 3;
@@ -191,9 +208,17 @@ export const MAX_FACT_CALLS_PER_TURN = 3;
 export type ScheduleTask = Pick<
   Task,
   "title" | "kind" | "priority" | "estimateMin" | "dueDate" | "time" | "done" | "status" | "seriesId"
->;
+> &
+  Partial<Pick<Task, "id" | "category" | "steps" | "occurrenceDate">>;
 
-export type ScheduleSession = { date: string; minutes: number; title: string };
+export type ScheduleSession = {
+  date: string;
+  minutes: number;
+  title: string;
+  /** Para `what_should_i_do_now`: qué subtarea es y cuándo vence su proyecto. */
+  subtaskId?: string;
+  deadline?: string;
+};
 
 export type ScheduleData = {
   tasks: readonly ScheduleTask[];
@@ -204,6 +229,10 @@ export type ScheduleData = {
   inflation: number;
   /** Factor de las categorías con medición propia. Sin la categoría, se usa `inflation`. */
   inflationByCategory?: Record<string, number>;
+  /** La agenda ocupada (recordatorios y tareas con hora, más lo que aporten fuentes externas). */
+  busyBlocks?: BusyBlock[];
+  /** Zona horaria del usuario: sin ella, los bloques no se pueden ubicar en el día. */
+  timeZone?: string;
 };
 
 /** Lo que `remember_fact` necesita de la base, atado al usuario autenticado. */
@@ -344,6 +373,10 @@ export function existingEntries(data: ScheduleData): ExistingEntry[] {
   }
   for (const session of data.sessions) {
     entries.push({ date: session.date, title: session.title, minutes: session.minutes });
+  }
+  // Nada se agenda encima de un compromiso: el margen y los eventos externos le restan al día.
+  if (data.busyBlocks?.length) {
+    for (const load of busyLoads(data.busyBlocks, data.timeZone ?? "UTC")) entries.push(load);
   }
   return entries;
 }
@@ -697,8 +730,77 @@ async function getMyPatterns(args: Record<string, unknown>, ctx: ToolContext): P
   });
 }
 
+const MAX_AVAILABLE_MIN = 24 * 60;
+const OPTIONS_MAX = 3;
+
+/**
+ * Lo que conviene hacer ahora. La elección es la de `lib/recommendation.ts` (la misma que la tarjeta de
+ * "hoy"): Milo la cuenta, no la decide. Con `availableMin` se usa lo que el usuario dijo, siempre cortado por
+ * su próximo compromiso real.
+ */
+async function whatShouldIDoNow(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  let availableMin: number | null = null;
+  if (args.availableMin !== undefined && args.availableMin !== null) {
+    const value = args.availableMin;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 1 || value > MAX_AVAILABLE_MIN) {
+      return fail(`availableMin tiene que ser un número de minutos entre 1 y ${MAX_AVAILABLE_MIN}. Si el usuario no dijo cuánto tiempo tiene, no lo pases.`);
+    }
+    availableMin = Math.floor(value);
+  }
+  if (args.energy !== undefined && args.energy !== null && args.energy !== "tired") {
+    return fail('energy solo puede ser "tired". Si no dijo que está cansado, no lo pases.');
+  }
+
+  const data = await ctx.load();
+  const timeZone = data.timeZone ?? "UTC";
+  let window = getFreeWindow({
+    now: ctx.now,
+    blocks: data.busyBlocks ?? [],
+    timeZone,
+    dayCapacityMin: capacityOn(ctx.today, data.availability, data.overrides)
+  });
+  const told = availableMin !== null;
+  if (availableMin !== null) window = withAvailableMinutes(window, availableMin);
+
+  const patterns = ctx.patterns ? await ctx.patterns().catch(() => null) : null;
+  const candidates: Task[] = [
+    ...(data.tasks as readonly Task[]).filter((t) => t.kind !== "project"),
+    ...data.sessions
+      .filter((s) => s.date <= ctx.today && s.subtaskId)
+      .map((s) => sessionCandidate({ subtaskId: s.subtaskId as string, title: s.title, minutes: s.minutes, deadline: s.deadline ?? s.date }))
+  ].map((t, index) => ({ ...t, id: t.id ?? `t${index}` }) as Task);
+
+  const options = getRecommendations(candidates, { now: ctx.now, timeZone, window, energy: args.energy === "tired" ? "tired" : undefined, patterns });
+  const copy = nowCopy("es");
+
+  const view = (rec: Recommendation) =>
+    rec.type === "task"
+      ? {
+          type: "task",
+          title: rec.task.title,
+          mode: rec.mode,
+          minutes: rec.minutes,
+          totalMinutes: rec.needMin,
+          dueDate: rec.task.dueDate,
+          reason: reasonLine(copy, rec, timeZone)
+        }
+      : { type: rec.type, reason: reasonLine(copy, rec, timeZone) };
+
+  const { nextBlock, currentBlock } = window;
+  return ok({
+    freeMin: window.freeMin,
+    freeText: windowLine(copy, window, timeZone),
+    minutesSource: told ? "lo dijo el usuario (cortado por su próximo compromiso)" : "su agenda",
+    ...(currentBlock ? { currentlyIn: currentBlock.title } : {}),
+    ...(nextBlock ? { nextCommitment: { title: nextBlock.title, startsAt: formatLocalTime(nextBlock.start, timeZone), importance: nextBlock.importance } } : {}),
+    recommendation: view(options[0]),
+    alternatives: options.slice(1, OPTIONS_MAX).map(view),
+    note: "Contale la recomendación con su razón y, si hay, una alternativa. Si es descansar o prepararse, decíselo tal cual: no inventes una tarea."
+  });
+}
+
 /** Tools que devuelven datos y no cierran el turno: el modelo puede seguir con otra. */
-export const READ_ONLY_TOOLS = new Set(["get_schedule", "get_my_patterns"]);
+export const READ_ONLY_TOOLS = new Set(["get_schedule", "get_my_patterns", "what_should_i_do_now"]);
 
 export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<ToolOutcome> {
   const args = parseArguments(call.arguments);
@@ -719,6 +821,8 @@ export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<Too
       }
       case "get_my_patterns":
         return await getMyPatterns(args, ctx);
+      case "what_should_i_do_now":
+        return await whatShouldIDoNow(args, ctx);
       case "plan_week": {
         const request = readPlanRequest(args, ctx);
         return "content" in request ? request : planWeekTool(request, ctx, await ctx.load());

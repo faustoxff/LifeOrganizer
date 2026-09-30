@@ -99,7 +99,19 @@ export type PlanContext = {
   /** Lo agendado hasta ahora: lo que `replan` intenta no mover. */
   previousSessions: readonly Session[];
   inflation?: number;
+  /**
+   * Minutos por fecha que la agenda ocupada (eventos, márgenes) le saca a la capacidad y que no
+   * están en `tasks`. Nada se agenda encima de un compromiso.
+   */
+  busyLoad?: Readonly<Record<string, number>>;
 };
+
+/** Suma dos cargas por fecha. */
+export function mergeLoads(...loads: readonly (Readonly<Record<string, number>> | undefined)[]): Record<string, number> {
+  const merged: Record<string, number> = {};
+  for (const load of loads) for (const [date, minutes] of Object.entries(load ?? {})) merged[date] = (merged[date] ?? 0) + minutes;
+  return merged;
+}
 
 /**
  * Planifica todos los proyectos a la vez (compiten por el mismo tiempo) sin mover lo
@@ -111,7 +123,7 @@ export function planProjects(ctx: PlanContext): ReplanOutput {
     availability: ctx.availability,
     overrides: ctx.overrides,
     projects: [...ctx.projects],
-    fixedLoad: computeFixedLoad(ctx.tasks, ctx.today),
+    fixedLoad: mergeLoads(computeFixedLoad(ctx.tasks, ctx.today), ctx.busyLoad),
     params: { inflation: ctx.inflation ?? DEFAULT_INFLATION }
   };
   const previous: PreviousPlan = { sessions: [...ctx.previousSessions] };

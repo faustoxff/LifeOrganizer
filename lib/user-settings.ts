@@ -1,3 +1,4 @@
+import { readPrep, type PrepSettings } from "@/lib/busy-blocks";
 import "server-only";
 import sql from "@/lib/db";
 import {
@@ -130,4 +131,21 @@ export async function saveApproxLocation(userId: string, location: ApproxLocatio
 
 export async function clearApproxLocation(userId: string): Promise<void> {
   await sql`UPDATE user_settings SET approx_lat = NULL, approx_lon = NULL, updated_at = NOW() WHERE user_id = ${userId}`;
+}
+
+// --- Margen antes de un compromiso (etapa 7) -----------------------------------------
+
+export async function getPrepSettings(userId: string): Promise<PrepSettings> {
+  const rows = await sql`SELECT prep_calendar_min, prep_reminder_min FROM user_settings WHERE user_id = ${userId}`;
+  return readPrep(rows[0]?.prep_calendar_min, rows[0]?.prep_reminder_min);
+}
+
+/** Upsert: no pisa la zona ni la disponibilidad. */
+export async function savePrepSettings(userId: string, prep: PrepSettings): Promise<void> {
+  await sql`
+    INSERT INTO user_settings (user_id, prep_calendar_min, prep_reminder_min, updated_at)
+    VALUES (${userId}, ${prep.calendarMin}, ${prep.reminderMin}, NOW())
+    ON CONFLICT (user_id) DO UPDATE
+      SET prep_calendar_min = ${prep.calendarMin}, prep_reminder_min = ${prep.reminderMin}, updated_at = NOW()
+  `;
 }

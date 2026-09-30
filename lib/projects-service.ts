@@ -2,6 +2,9 @@ import "server-only";
 import { addExtraMinutes, draftProject, planProjects, progressOf, schedulerProjectFrom, sessionFromRecord, unprefixDraftSessions, DRAFT_PROJECT_ID } from "@/lib/project-scheduling";
 import { inflationFor, type UserPatterns } from "@/lib/user-patterns";
 import { patternsLoader } from "@/lib/user-history";
+import { busyLoadByDate } from "@/lib/busy-blocks";
+import { getBusyBlocks } from "@/lib/busy-blocks-server";
+import { addDays } from "@/lib/recurrence";
 import { MAX_ACTIVE_PROJECTS, tomorrowOf, type DraftBody } from "@/lib/project-input";
 import {
   applySubtaskPatch,
@@ -38,27 +41,35 @@ export class ProjectLimitError extends Error {
   }
 }
 
+/** Hasta dónde mira compromisos con hora: los recordatorios se generan de a 14 días, así que casi nunca hay más. */
+const BUSY_HORIZON_DAYS = 120;
+
 type State = {
   availability: Availability;
   overrides: AvailabilityOverrides;
   tasks: Task[];
   /** Lo aprendido del usuario: de ahí sale el factor de cada categoría. */
   patterns: UserPatterns;
+  /** Minutos por fecha que la agenda ocupada le resta a la capacidad. */
+  busyLoad: Record<string, number>;
   records: ProjectRecord[];
 };
 
-async function loadState(userId: string): Promise<State> {
+async function loadState(userId: string, today: string): Promise<State> {
   const [settings, tasks, patterns, records] = await Promise.all([
     getAvailabilitySettings(userId),
     loadTasks(userId),
     patternsLoader(userId)(),
     loadProjectRecords(userId)
   ]);
+  // Los compromisos con hora de los próximos meses: el scheduler no puede cargarlos con trabajo.
+  const busy = await getBusyBlocks(userId, today, addDays(today, BUSY_HORIZON_DAYS), { tasks });
   return {
     availability: settings.availability,
     overrides: settings.overrides,
     tasks,
     patterns,
+    busyLoad: busyLoadByDate(busy.blocks, busy.timeZone),
     records
   };
 }
@@ -79,6 +90,7 @@ function planState(state: State, today: string, extra: ReturnType<typeof draftPr
     tasks: state.tasks,
     projects: [...active.map((r) => schedulerProjectFrom(r.task, r.subtasks, inflationOf(state, r.task.category))), ...extra],
     previousSessions: active.flatMap((r) => r.sessions.map(sessionFromRecord)),
+    busyLoad: state.busyLoad,
     inflation: inflationOf(state, "general")
   });
 }
@@ -133,7 +145,7 @@ function toViews(state: State, result: ReplanOutput): ProjectView[] {
 
 /** Replanifica y guarda. Se usa una vez por día al cargar y al completar o saltear una subtarea. */
 async function replanAndPersist(userId: string, today: string): Promise<{ state: State; result: ReplanOutput }> {
-  const state = await loadState(userId);
+  const state = await loadState(userId, today);
   const result = planState(state, today);
   await persist(userId, state, result);
   return { state, result };
@@ -150,7 +162,7 @@ export async function ensureDailyReplan(userId: string, today: string): Promise<
 /** Los proyectos del usuario con su agenda y cómo viene el plan. */
 export async function listProjects(userId: string, today: string): Promise<ProjectView[]> {
   await ensureDailyReplan(userId, today);
-  const state = await loadState(userId);
+  const state = await loadState(userId, today);
   return toViews(state, planState(state, today));
 }
 
@@ -163,7 +175,7 @@ export async function previewDraft(
   today: string,
   draft: Pick<DraftBody, "deadline" | "dailyCapMin" | "subtasks" | "extraMinPerDay">
 ): Promise<ProjectDraftPlan> {
-  const state = await loadState(userId);
+  const state = await loadState(userId, today);
   const result = planState(state, today, [draftProject(draft.deadline, draft.dailyCapMin, draft.subtasks, inflationOf(state, "general"))], draft.extraMinPerDay);
   return {
     subtasks: draft.subtasks,
@@ -176,7 +188,7 @@ export async function previewDraft(
 
 /** Crea el proyecto. El servidor recalcula el plan: nunca se confía en sesiones del cliente. */
 export async function createFromDraft(userId: string, today: string, draft: DraftBody): Promise<ProjectView[]> {
-  const state = await loadState(userId);
+  const state = await loadState(userId, today);
   if (state.records.filter(isActive).length >= MAX_ACTIVE_PROJECTS) throw new ProjectLimitError();
 
   const projectId = crypto.randomUUID();
@@ -218,7 +230,7 @@ export async function createFromDraft(userId: string, today: string, draft: Draf
     await saveAvailabilitySettings(userId, availability, overrides);
   }
 
-  const fresh = await loadState(userId);
+  const fresh = await loadState(userId, today);
   const result = planState({ ...fresh, availability, overrides }, today);
   await persist(userId, fresh, result);
   return toViews(fresh, result);
@@ -254,7 +266,7 @@ export async function moveDeadline(userId: string, today: string, projectId: str
 
 /** Suma minutos por día a la disponibilidad (la opción "más minutos por día") y replanifica. */
 export async function addDailyMinutes(userId: string, today: string, extraMin: number): Promise<ProjectView[]> {
-  const state = await loadState(userId);
+  const state = await loadState(userId, today);
   const boosted = addExtraMinutes(state.availability, state.overrides, extraMin);
   await saveAvailabilitySettings(userId, boosted.availability, boosted.overrides);
   const { state: fresh, result } = await replanAndPersist(userId, today);

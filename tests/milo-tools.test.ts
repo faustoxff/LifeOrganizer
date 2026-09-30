@@ -8,6 +8,7 @@ import {
   GET_SCHEDULE,
   GET_MY_PATTERNS,
   MILO_TOOLS,
+  WHAT_SHOULD_I_DO_NOW,
   PLAN_WEEK,
   QUESTION_MAX,
   REMEMBER_FACT,
@@ -45,9 +46,9 @@ const call = (name: string, args: unknown) => ({
 const parse = (content: string) => JSON.parse(content) as Record<string, any>;
 
 describe("especificación", () => {
-  it("son las seis tools, con nombre y esquema", () => {
-    expect(MILO_TOOLS.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user", "remember_fact", "get_my_patterns"]);
-    for (const tool of [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS]) {
+  it("son las siete tools, con nombre y esquema", () => {
+    expect(MILO_TOOLS.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user", "remember_fact", "get_my_patterns", "what_should_i_do_now"]);
+    for (const tool of [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS, WHAT_SHOULD_I_DO_NOW]) {
       expect(tool.description.length).toBeGreaterThan(20);
       expect(tool.parameters.type).toBe("object");
       expect(Array.isArray(tool.parameters.required)).toBe(true);

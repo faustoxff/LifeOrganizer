@@ -3,6 +3,8 @@ import type { ScheduleData, ToolContext } from "@/lib/milo-tools";
 import { listFacts, saveFact } from "@/lib/facts-storage";
 import { loadProjectRecords } from "@/lib/projects-storage";
 import { patternsLoader } from "@/lib/user-history";
+import { getBusyBlocks } from "@/lib/busy-blocks-server";
+import { addDays } from "@/lib/recurrence";
 import { loadTasks } from "@/lib/storage";
 import { getAvailabilitySettings } from "@/lib/user-settings";
 
@@ -28,13 +30,13 @@ export function createToolContext(userId: string, today: string, now: Date, user
     },
     patterns,
     load() {
-      cached ??= readScheduleData(userId, patterns);
+      cached ??= readScheduleData(userId, today, patterns);
       return cached;
     }
   };
 }
 
-async function readScheduleData(userId: string, loadPatterns: ReturnType<typeof patternsLoader>): Promise<ScheduleData> {
+async function readScheduleData(userId: string, today: string, loadPatterns: ReturnType<typeof patternsLoader>): Promise<ScheduleData> {
   const [tasks, records, settings, patterns] = await Promise.all([
     loadTasks(userId),
     loadProjectRecords(userId),
@@ -52,10 +54,15 @@ async function readScheduleData(userId: string, loadPatterns: ReturnType<typeof 
         .map(({ session, subtask }) => ({
           date: session.date,
           minutes: session.minutes,
-          title: `${record.task.title} · ${subtask!.title}`
+          title: `${record.task.title} · ${subtask!.title}`,
+          subtaskId: session.subtaskId,
+          deadline: record.task.dueDate
         }))
     );
 
+  // Los compromisos con hora de los próximos 90 días: `plan_week` no los carga con trabajo y
+  // `what_should_i_do_now` los usa para saber cuánto tiempo libre hay.
+  const busy = await getBusyBlocks(userId, today, addDays(today, 90), { tasks });
   const { global, categories } = patterns.inflation;
   return {
     tasks,
@@ -65,6 +72,8 @@ async function readScheduleData(userId: string, loadPatterns: ReturnType<typeof 
     // Sin historial suficiente el default (1.3) es una suposición: para repartir tareas
     // sueltas se usa la estimación tal cual en vez de inflarlas por un promedio ajeno.
     // Una categoría con medición propia manda sobre el global.
+    busyBlocks: busy.blocks,
+    timeZone: busy.timeZone,
     inflation: global.learned ? global.factor : 1,
     inflationByCategory: Object.fromEntries(
       Object.entries(categories)

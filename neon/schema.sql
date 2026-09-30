@@ -264,3 +264,10 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_postponed_at TIMESTAMPTZ;
 ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS completed_hour SMALLINT
   CHECK (completed_hour IS NULL OR completed_hour BETWEEN 0 AND 23);
 ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS postponed_count INTEGER NOT NULL DEFAULT 0;
+
+-- Etapa 7: margen antes de un compromiso (viaje, prepararse). NULL = el default (15 min para
+-- eventos de calendario, 0 para recordatorios y tareas con hora).
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS prep_calendar_min SMALLINT
+  CHECK (prep_calendar_min IS NULL OR prep_calendar_min BETWEEN 0 AND 240);
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS prep_reminder_min SMALLINT
+  CHECK (prep_reminder_min IS NULL OR prep_reminder_min BETWEEN 0 AND 240);

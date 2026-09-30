@@ -19,6 +19,8 @@ vi.mock("@/lib/user-history", async () => {
   const { computePatterns } = await import("@/lib/user-patterns");
   return { patternsLoader: (userId: string) => async () => computePatterns(await loadHistory(userId)) };
 });
+const getBusyBlocks = vi.fn();
+vi.mock("@/lib/busy-blocks-server", () => ({ getBusyBlocks: (...a: unknown[]) => getBusyBlocks(...a) }));
 vi.mock("@/lib/facts-storage", () => ({ listFacts: vi.fn(async () => []), saveFact: vi.fn(async () => ({ status: "saved" })) }));
 vi.mock("@/lib/user-settings", () => ({ getAvailabilitySettings: (...a: unknown[]) => getAvailabilitySettings(...a) }));
 
@@ -47,6 +49,7 @@ beforeEach(() => {
     { task: { id: "p2", title: "Terminado", done: true }, subtasks: [{ id: "s3", title: "X", done: false }], sessions: [{ subtaskId: "s3", date: "2026-09-29", minutes: 45 }] }
   ]);
   loadHistory.mockResolvedValue([]);
+  getBusyBlocks.mockResolvedValue({ blocks: [], timeZone: "UTC", prep: { calendarMin: 15, reminderMin: 0 } });
   getAvailabilitySettings.mockResolvedValue({ availability: DEFAULT_AVAILABILITY, overrides: {}, configured: true });
 });
 
@@ -58,6 +61,9 @@ describe("createToolContext", () => {
       expect(reader).toHaveBeenCalledTimes(1);
       expect(reader).toHaveBeenCalledWith("user_A");
     }
+    // La agenda ocupada también se lee para el usuario autenticado.
+    expect(getBusyBlocks).toHaveBeenCalledTimes(1);
+    expect(getBusyBlocks.mock.calls[0][0]).toBe("user_A");
   });
 
   it("un userId en los argumentos del modelo no cambia de quién son los datos", async () => {
@@ -92,7 +98,7 @@ describe("createToolContext", () => {
   it("las sesiones de un proyecto terminado o de una subtarea hecha no cuentan", async () => {
     const ctx = createToolContext("user_A", "2026-09-28", NOW);
     const data = await ctx.load();
-    expect(data.sessions).toEqual([{ date: "2026-09-29", minutes: 60, title: "TFG · Capítulo 1" }]);
+    expect(data.sessions).toEqual([{ date: "2026-09-29", minutes: 60, title: "TFG · Capítulo 1", subtaskId: "s1", deadline: undefined }]);
   });
 
   it("sin historial suficiente no infla; con historial usa el factor aprendido", async () => {

@@ -206,6 +206,21 @@ describe("patrones del usuario (etapa 6)", () => {
   });
 });
 
+describe("agenda ocupada (etapa 7)", () => {
+  it("el margen por usuario se lee y guarda solo por user_id (user-settings ya está guardado arriba)", () => {
+    const source = read("lib/user-settings.ts");
+    const prep = source.slice(source.indexOf("getPrepSettings"));
+    for (const query of prep.match(/sql`[\s\S]*?`/g) ?? []) expect(query).toMatch(/user_id/);
+  });
+
+  it("las fuentes de bloques reciben el usuario y no hay cache a nivel de módulo", () => {
+    const source = read("lib/busy-blocks-server.ts");
+    expect(source).toMatch(/load: \(userId: string/);
+    expect(source).not.toMatch(/new Map\(/);
+    expect(source).not.toMatch(/^(const|let) \w*[Cc]ache\b/m);
+  });
+});
+
 describe("server-side AI caches", () => {
   it("include the user in the cache key", () => {
     // These Maps live in the server process and are shared by every request.

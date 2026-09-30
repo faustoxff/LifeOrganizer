@@ -218,3 +218,25 @@ function idleRecommendation(window: FreeWindow, hadTasks: boolean, hadLowFits: b
 export function getRecommendedTask(tasks: readonly Task[], ctx: RecommendationContext): Recommendation {
   return getRecommendations(tasks, ctx)[0];
 }
+
+/** Una sesión de proyecto de hoy, como candidata: un pedazo de trabajo con su duración y la fecha límite del proyecto. */
+export function sessionCandidate(input: {
+  subtaskId: string;
+  title: string;
+  minutes: number;
+  deadline: string;
+  priority?: Task["priority"];
+}): Task {
+  return {
+    id: `session:${input.subtaskId}`,
+    title: input.title,
+    category: "project",
+    description: "",
+    priority: input.priority ?? "medium",
+    estimateMin: Math.max(1, Math.round(input.minutes)),
+    dueDate: input.deadline,
+    done: false,
+    status: "pending",
+    kind: "project"
+  };
+}

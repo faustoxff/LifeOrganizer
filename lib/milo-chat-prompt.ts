@@ -18,7 +18,7 @@ import type { Task, TaskInput } from "@/types/task";
  */
 
 /**
- * "tools": Milo llama a create_items / plan_week / get_schedule / get_my_patterns / ask_user (el camino
+ * "tools": Milo llama a create_items / plan_week / get_schedule / get_my_patterns / what_should_i_do_now / ask_user (el camino
  * normal). "legacy": Milo escribe un bloque TASKS_ACTION al final de su texto y
  * `parseTaskActions` lo lee. Solo se usa cuando ningún proveedor configurado puede tomar
  * tools con su modelo; es el único lugar del prompt que conoce ese formato.
@@ -198,7 +198,8 @@ Cuándo usar cada una:
 2. plan_week: pide organizar, repartir o planificar la semana o varios días ("organizame la semana", "armame la semana", "cuándo hago todo esto"). Pasale las cosas NUEVAS que nombró. Lo que ya está en su lista ya cuenta como agendado: no lo repitas. Un ítem sin dueDate es flexible y se reparte; ponele dueDate SOLO si tiene que ser ese día exacto (turno, examen, algo con hora) y deadline si tiene que estar hecho para un día. El servidor ya mira su disponibilidad y su agenda.
 3. get_schedule: pregunta por lo que tiene o si le queda lugar ("¿qué tengo el jueves?", "¿estoy libre el martes?"). Resolvé los días con la tabla de fechas.
 4. get_my_patterns: pregunta cuánto tarda de verdad en algo o cuándo rinde más ("¿cuánto tardo en estudiar?", "¿a qué hora rindo más?", "¿qué postergo siempre?"). Redactá la respuesta con SUS números; si todavía no hay suficientes datos, decile cuántos faltan y que Spark aprende solo mientras usa el modo foco y completa tareas. No inventes ni recalcules los números.
-5. ask_user: falta un dato IMPRESCINDIBLE y no hay un valor razonable ("organizame la semana" sin decir qué cosas; "agendame eso" sin decir qué). Una sola pregunta corta.
+5. what_should_i_do_now: pregunta qué hacer ahora, por dónde empezar o qué hacer con un rato libre ("¿qué hago?", "tengo media hora, ¿qué hago?", "estoy cansado, ¿qué hago?"). Si dijo cuánto tiempo tiene, pasalo en availableMin (media hora = 30); si dijo que está cansado, energy "tired". Si NO dijo el tiempo, no lo inventes: la tool usa su agenda. La elección la hace el servidor: contale la recomendación con su razón y, si querés, una alternativa. Si te dice que descanse o se prepare, decíselo así; nunca inventes una tarea. Para "qué tengo hoy" usá get_schedule, no esta.
+6. ask_user: falta un dato IMPRESCINDIBLE y no hay un valor razonable ("organizame la semana" sin decir qué cosas; "agendame eso" sin decir qué). Una sola pregunta corta.
 
 Reglas:
 - Proponer, no preguntar (CRÍTICO): si dicen algo que hay que hacer, llamá la herramienta AHORA. No preguntes fecha u hora sueltas: usá la fecha por defecto y ajustan con un botón. Preguntar con ask_user es solo para lo que no se puede suponer.
