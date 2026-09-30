@@ -5,7 +5,7 @@ import { type AgentMessage, type Completion, type CompletionRequest, type ModelT
 import { buildChatMessages } from "@/lib/milo";
 import { executeTool, MILO_TOOLS, type ToolContext } from "@/lib/milo-tools";
 import { stripTaskBlock } from "@/lib/task-actions";
-import type { WeekProposal } from "@/types/milo";
+import type { FactProposal, SavedFact, WeekProposal } from "@/types/milo";
 import type { TaskInput } from "@/types/task";
 
 /**
@@ -25,6 +25,8 @@ const AGENT_MAX_TOKENS = 2000;
 export const DEFAULT_PROPOSAL_TEXT = "Te dejo esta propuesta para que la confirmes. Si querés cambiar algo, decime.";
 export const DEFAULT_ITEMS_TEXT = "Te dejo esto para que lo confirmes. Si querés cambiar algo, decime.";
 export const DEFAULT_EMPTY_TEXT = "No pude armar la respuesta. ¿Me lo repetís?";
+export const DEFAULT_FACT_TEXT = "Anotado, lo tengo en cuenta.";
+export const DEFAULT_FACT_PROPOSAL_TEXT = "¿Querés que me acuerde de eso? Confirmalo abajo.";
 
 export type AgentParams = {
   message: string;
@@ -42,6 +44,10 @@ export type AgentResult = {
   /** Ítems para confirmar. Vacío si no se propuso nada. */
   taskActions: TaskInput[];
   proposal: WeekProposal | null;
+  /** Datos que el usuario dijo y quedaron guardados en este turno. */
+  factsSaved: SavedFact[];
+  /** Datos que Milo dedujo: esperan la confirmación del usuario, no están guardados. */
+  factProposals: FactProposal[];
   /** Nombres de las tools que se ejecutaron, en orden. Para logs y evals. */
   toolsUsed: string[];
   rounds: number;
@@ -69,6 +75,8 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
 
   let taskActions: TaskInput[] = [];
   let proposal: WeekProposal | null = null;
+  const factsSaved: SavedFact[] = [];
+  const factProposals: FactProposal[] = [];
   const toolsUsed: string[] = [];
   let provider = "";
   let model = "";
@@ -77,9 +85,11 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
   let rounds = 0;
 
   const done = (text: string): AgentResult => ({
-    text: text.trim() || fallbackText(taskActions, proposal),
+    text: text.trim() || fallbackText(taskActions, proposal, factsSaved, factProposals),
     taskActions,
     proposal,
+    factsSaved,
+    factProposals,
     toolsUsed,
     rounds,
     provider,
@@ -102,7 +112,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
       });
     } catch (error) {
       // Si ya se propuso algo, eso vale más que un error: se devuelve con un texto por defecto.
-      if (round > 1 && (taskActions.length > 0 || proposal)) {
+      if (round > 1 && (taskActions.length > 0 || proposal || factsSaved.length > 0 || factProposals.length > 0)) {
         console.warn(`[milo] round ${round} failed after a proposal, returning it as is`, error);
         return done("");
       }
@@ -116,7 +126,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
       let text = response.content;
       // Un modelo que se quedó sin presupuesto pensando devuelve vacío. Un reintento en otro
       // proveedor lo arregla casi siempre; si ya hay una propuesta no hace falta.
-      if (text.trim() === "" && taskActions.length === 0 && !proposal) {
+      if (text.trim() === "" && taskActions.length === 0 && !proposal && factsSaved.length === 0 && factProposals.length === 0) {
         text = await retryEmpty(deps, { messages, tier, timeoutMs }, response.provider);
       }
       return done(stripTaskBlock(text));
@@ -133,6 +143,8 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
 
       const effect = outcome.effect;
       if (effect?.ask) asked = effect.ask;
+      if (effect?.factSaved && !factsSaved.some((f) => f.key === effect.factSaved!.key)) factsSaved.push(effect.factSaved);
+      if (effect?.factProposal && !factProposals.some((f) => f.key === effect.factProposal!.key)) factProposals.push(effect.factProposal);
       if (effect?.proposal) {
         proposal = effect.proposal;
         taskActions = effect.taskActions ?? [];
@@ -165,9 +177,16 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
   return done("");
 }
 
-function fallbackText(taskActions: TaskInput[], proposal: WeekProposal | null): string {
+function fallbackText(
+  taskActions: TaskInput[],
+  proposal: WeekProposal | null,
+  factsSaved: SavedFact[],
+  factProposals: FactProposal[]
+): string {
   if (proposal) return DEFAULT_PROPOSAL_TEXT;
   if (taskActions.length > 0) return DEFAULT_ITEMS_TEXT;
+  if (factProposals.length > 0) return DEFAULT_FACT_PROPOSAL_TEXT;
+  if (factsSaved.length > 0) return DEFAULT_FACT_TEXT;
   return DEFAULT_EMPTY_TEXT;
 }
 

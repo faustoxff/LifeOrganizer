@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai-priority-config";
 import { AppLanguage } from "@/lib/i18n";
 import { requireAuth, getUserPlan } from "@/lib/server-auth";
+import { loadBestTimeHint } from "@/lib/personal-context-server";
 import { consumeDailyUsage } from "@/lib/usage-limits";
 
 const MAX_TASKS = 100;
@@ -172,9 +173,10 @@ async function requestMiloRecommendation(
         tasks: taskInputs
       };
 
+  const bestTime = await loadBestTimeHint(userId);
   const { content, model } = await chatWithMilo({
     message: JSON.stringify(requestPayload),
-    context: buildAiPriorityInstructions(taskInputs.length, language, validTaskIds)
+    context: [buildAiPriorityInstructions(taskInputs.length, language, validTaskIds), bestTime].filter(Boolean).join("\n\n")
   });
 
   const validRecommendation = await parseAndValidateRecommendation({

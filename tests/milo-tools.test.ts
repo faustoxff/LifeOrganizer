@@ -9,6 +9,7 @@ import {
   MILO_TOOLS,
   PLAN_WEEK,
   QUESTION_MAX,
+  REMEMBER_FACT,
   SCHEDULE_MAX_DAYS,
   type ScheduleData,
   type ToolContext
@@ -43,9 +44,9 @@ const call = (name: string, args: unknown) => ({
 const parse = (content: string) => JSON.parse(content) as Record<string, any>;
 
 describe("especificación", () => {
-  it("son las cuatro tools pedidas, con nombre y esquema", () => {
-    expect(MILO_TOOLS.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user"]);
-    for (const tool of [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER]) {
+  it("son las cinco tools, con nombre y esquema", () => {
+    expect(MILO_TOOLS.map((t) => t.name)).toEqual(["create_items", "plan_week", "get_schedule", "ask_user", "remember_fact"]);
+    for (const tool of [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT]) {
       expect(tool.description.length).toBeGreaterThan(20);
       expect(tool.parameters.type).toBe("object");
       expect(Array.isArray(tool.parameters.required)).toBe(true);

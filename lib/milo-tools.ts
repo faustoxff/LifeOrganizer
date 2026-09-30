@@ -3,6 +3,7 @@ import { capacityOn } from "@/lib/availability";
 import type { ToolCall, ToolSpec } from "@/lib/ai/types";
 import { addDays, daysBetween, isDateKey } from "@/lib/recurrence";
 import { normalizeTaskAction } from "@/lib/task-actions";
+import { quoteAppearsIn, validateFact, type UserFact } from "@/lib/user-facts";
 import { describeDeferred, describeReason, describeWarning, formatMinutes, weekdayName } from "@/lib/week-plan-text";
 import {
   MAX_WEEK_ITEMS,
@@ -12,7 +13,7 @@ import {
   type WeekItem,
   type WeekPlan
 } from "@/lib/week-planner";
-import type { ProposalItem, WeekProposal } from "@/types/milo";
+import type { FactProposal, ProposalItem, SavedFact, WeekProposal } from "@/types/milo";
 import type { Task, TaskInput, TaskKind, TaskPriority } from "@/types/task";
 
 /**
@@ -145,7 +146,29 @@ export const ASK_USER: ToolSpec = {
   }
 };
 
-export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER];
+export const REMEMBER_FACT: ToolSpec = {
+  name: "remember_fact",
+  description:
+    "Guarda un dato que el usuario cuenta de sí mismo y sirve para organizarle la vida (hábitos, horarios en los que rinde, deportes, si es despistado). " +
+    'Con source "stated" (lo dijo él) se guarda al instante y hay que copiar sus palabras textuales en quote. ' +
+    'Con source "inferred" (lo dedujiste vos) NO se guarda: el usuario lo confirma con un botón. Nunca datos de salud, dinero, documentos, contactos, religión ni política.',
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "snake_case corta: es_despistado, horario_mejor_rendimiento, deportes…" },
+      value: { type: "string", description: "el dato, en una línea corta" },
+      source: { type: "string", enum: ["stated", "inferred"] },
+      quote: { type: "string", description: 'solo con "stated": las palabras TEXTUALES del usuario en su mensaje de ahora' },
+      confidence: { type: "number", description: 'solo con "inferred": 0.1 a 0.95' }
+    },
+    required: ["key", "value", "source"]
+  }
+};
+
+export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT];
+
+/** Cuántos hechos puede tocar Milo en un mismo turno: un tope contra un modelo que "recuerda" todo. */
+export const MAX_FACT_CALLS_PER_TURN = 3;
 
 // ---------------------------------------------------------------------------
 // Datos que las tools leen
@@ -167,7 +190,18 @@ export type ScheduleData = {
   inflation: number;
 };
 
+/** Lo que `remember_fact` necesita de la base, atado al usuario autenticado. */
+export type FactsPort = {
+  list: () => Promise<UserFact[]>;
+  save: (input: { key: string; value: string; source: "stated"; confidence: 1 }) => Promise<{ status: "saved" | "exists_stated" | "limit" }>;
+};
+
 export type ToolContext = {
+  /** El mensaje del usuario en este turno: `remember_fact` comprueba contra él que lo haya dicho. */
+  userMessage?: string;
+  facts?: FactsPort;
+  /** Cuántas veces se llamó a remember_fact en este turno. */
+  turn?: { factCalls: number };
   /** Hoy, en la zona del usuario. */
   today: string;
   now: Date;
@@ -181,6 +215,10 @@ export type ToolEffect = {
   proposal?: WeekProposal;
   /** Pregunta para el usuario: cierra el turno. */
   ask?: string;
+  /** Un hecho guardado porque el usuario lo dijo. */
+  factSaved?: SavedFact;
+  /** Un hecho deducido: espera la confirmación del usuario. */
+  factProposal?: FactProposal;
 };
 
 export type ToolOutcome = {
@@ -536,6 +574,61 @@ function askUser(args: Record<string, unknown>): ToolOutcome {
   return ok({ asked: true }, { ask: question });
 }
 
+// ---------------------------------------------------------------------------
+// remember_fact
+// ---------------------------------------------------------------------------
+
+/**
+ * La única tool que escribe. Lo hace bajo condiciones que el servidor comprueba y no el modelo:
+ * el hecho pasa el filtro de datos sensibles, y si es `stated` el usuario tiene que haberlo dicho
+ * de verdad (`quote` aparece en su mensaje). Lo deducido nunca se guarda desde acá.
+ */
+async function rememberFact(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!ctx.facts) return fail("La memoria no está disponible ahora. Seguí sin guardar nada.");
+  if (ctx.turn && ctx.turn.factCalls >= MAX_FACT_CALLS_PER_TURN) {
+    return fail(`Solo se pueden guardar ${MAX_FACT_CALLS_PER_TURN} datos por mensaje.`);
+  }
+  if (ctx.turn) ctx.turn.factCalls += 1;
+
+  const source = args.source;
+  if (source !== "stated" && source !== "inferred") return fail('source tiene que ser "stated" o "inferred"');
+
+  const check = validateFact({ key: args.key, value: args.value });
+  if (!check.ok) {
+    if (check.reason === "sensitive") {
+      return fail(
+        "Ese tipo de dato (salud, dinero, documentos, contacto, creencias) no se guarda. No lo guardes ni lo propongas; si el usuario te lo pidió, decile con amabilidad que Spark no guarda eso.",
+        { saved: false }
+      );
+    }
+    return fail(check.reason === "key" ? "key inválida: usá snake_case corta, por ejemplo deportes" : "value vacío o de más de 200 caracteres");
+  }
+
+  if (source === "inferred") {
+    const known = (await ctx.facts.list()).find((f) => f.key === check.key);
+    if (known && (known.source === "stated" || known.value === check.value)) {
+      return ok({ saved: false, note: "Eso ya lo sabemos: no hace falta proponerlo." });
+    }
+    const raw = typeof args.confidence === "number" && Number.isFinite(args.confidence) ? args.confidence : 0.6;
+    const confidence = Math.min(0.95, Math.max(0.1, raw));
+    return ok(
+      { saved: false, note: "Todavía NO está guardado: el usuario lo confirma con un botón. Preguntale si querés que te acuerdes, no lo des por hecho." },
+      { factProposal: { key: check.key, value: check.value, confidence } }
+    );
+  }
+
+  if (!ctx.userMessage || !quoteAppearsIn(args.quote, ctx.userMessage)) {
+    return fail(
+      'El usuario no dijo eso con esas palabras en este mensaje, así que no se guarda como "stated". Si lo dedujiste vos, usá source "inferred".',
+      { saved: false }
+    );
+  }
+
+  const result = await ctx.facts.save({ key: check.key, value: check.value, source: "stated", confidence: 1 });
+  if (result.status === "limit") return fail("Ya hay demasiados datos guardados. El usuario puede borrar alguno en «Lo que Spark sabe de vos».", { saved: false });
+  return ok({ saved: true, note: "Guardado. Podés decirle que lo tenés en cuenta." }, { factSaved: { key: check.key, value: check.value } });
+}
+
 /** Tools que devuelven datos y no cierran el turno: el modelo puede seguir con otra. */
 export const READ_ONLY_TOOLS = new Set(["get_schedule"]);
 
@@ -549,6 +642,8 @@ export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<Too
         return createItems(args, ctx);
       case "ask_user":
         return askUser(args);
+      case "remember_fact":
+        return await rememberFact(args, ctx);
       case "get_schedule": {
         // Se valida antes de tocar la base: una llamada mal armada no cuesta una consulta.
         const range = readRange(args);

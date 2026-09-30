@@ -1,6 +1,7 @@
 import "server-only";
 import { learnInflation } from "@/lib/estimate-learning";
 import type { ScheduleData, ToolContext } from "@/lib/milo-tools";
+import { listFacts, saveFact } from "@/lib/facts-storage";
 import { loadEstimateHistory, loadProjectRecords } from "@/lib/projects-storage";
 import { loadTasks } from "@/lib/storage";
 import { getAvailabilitySettings } from "@/lib/user-settings";
@@ -11,12 +12,18 @@ import { getAvailabilitySettings } from "@/lib/user-settings";
  * lectura de acá filtra por él. Los datos se leen una sola vez por turno, y solo si una
  * tool los pide.
  */
-export function createToolContext(userId: string, today: string, now: Date): ToolContext {
+export function createToolContext(userId: string, today: string, now: Date, userMessage = ""): ToolContext {
   let cached: Promise<ScheduleData> | null = null;
 
   return {
     today,
     now,
+    userMessage,
+    turn: { factCalls: 0 },
+    facts: {
+      list: () => listFacts(userId),
+      save: (input) => saveFact(userId, input)
+    },
     load() {
       cached ??= readScheduleData(userId);
       return cached;

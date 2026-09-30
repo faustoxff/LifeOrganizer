@@ -5,6 +5,7 @@ import { chatWithMilo, classifyChatFailure, refreshUserMemorySummary } from "@/l
 import { runMiloAgent, toolsNotSupported } from "@/lib/milo-agent";
 import { buildTaskPromptParts, type PromptMode } from "@/lib/milo-chat-prompt";
 import { createToolContext } from "@/lib/milo-tools-server";
+import { loadPersonalContext } from "@/lib/personal-context-server";
 import { normalizeTaskAction, parseTaskActions } from "@/lib/task-actions";
 import { getTodayInTimeZone } from "@/lib/task-date";
 import { getZonedNow } from "@/lib/task-date";
@@ -13,7 +14,7 @@ import { requireAuth, getUserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage, dailyLimitResponse } from "@/lib/usage-limits";
 import { clampTasksForPrompt, HISTORY_CONTENT_LIMIT, HISTORY_MESSAGES_LIMIT } from "@/lib/prompt-input";
 import { bumpMessageCount, getUserMemory, saveUserMemory, shouldRefreshMemory } from "@/lib/user-memory";
-import type { WeekProposal } from "@/types/milo";
+import type { FactProposal, SavedFact, WeekProposal } from "@/types/milo";
 import { Task, TaskInput } from "@/types/task";
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -95,13 +96,29 @@ export async function POST(request: Request) {
   const isPro = plan === "pro";
   const tier = isPro ? "pro" : "standard";
 
+  // Lo que Spark sabe del usuario y viene al caso. Solo para planes con tools; un fallo no frena el chat.
+  const personal = canCreateTasks
+    ? await loadPersonalContext(userId, { message, history, tasks, today: getTodayInTimeZone(timeZone) })
+    : { facts: [], checklistHints: [] };
+
   const promptFor = (mode: PromptMode) =>
-    buildTaskPromptParts({ tasks, pendingTaskActions, canCreateTasks, userMemory, now, mode });
+    buildTaskPromptParts({
+      tasks,
+      pendingTaskActions,
+      canCreateTasks,
+      userMemory,
+      facts: personal.facts,
+      checklistHints: personal.checklistHints,
+      now,
+      mode
+    });
 
   try {
     let text = "";
     let taskActions: TaskInput[] = [];
     let proposal: WeekProposal | null = null;
+    let factsSaved: SavedFact[] = [];
+    let factProposals: FactProposal[] = [];
     let viaTools = false;
 
     // Milo llama tools cuando alguien puede crear y algún proveedor las soporta. Sin eso
@@ -115,11 +132,13 @@ export async function POST(request: Request) {
           context,
           history,
           isPro,
-          tools: createToolContext(userId, getTodayInTimeZone(timeZone), now)
+          tools: createToolContext(userId, getTodayInTimeZone(timeZone), now, message)
         });
         text = result.text;
         taskActions = result.taskActions;
         proposal = result.proposal;
+        factsSaved = result.factsSaved;
+        factProposals = result.factProposals;
         viaTools = true;
         console.info(
           `[milo] user=${userId} tools=[${result.toolsUsed.join(", ")}] rounds=${result.rounds} via=${result.provider}`
@@ -163,7 +182,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       response: text,
       taskActions: canCreateTasks && taskActions.length > 0 ? taskActions : null,
-      proposal: canCreateTasks ? proposal : null
+      proposal: canCreateTasks ? proposal : null,
+      // Lo que Milo guardó (lo dijo el usuario) y lo que propone guardar (espera confirmación).
+      factsSaved: canCreateTasks ? factsSaved : [],
+      factProposals: canCreateTasks ? factProposals : []
     });
   } catch (error) {
     // Groq's plan allows 200k tokens per day for the whole account, so a budget

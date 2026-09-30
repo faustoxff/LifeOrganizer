@@ -102,7 +102,7 @@ describe("API routes", () => {
       // The project routes authenticate through lib/project-route.ts, checked below.
       const guarded =
         /requireAuth(WithEmail)?\s*\(/.test(source) ||
-        /\bauthenticate\s*\(/.test(source) ||
+        /\bauthenticate(Paid)?\s*\(/.test(source) ||
         /WebhookSignatureValidator|verifyWebhookSignature/.test(source);
       expect(guarded, `${route} has no identity check`).toBe(true);
     }
@@ -121,6 +121,46 @@ describe("project routes", () => {
       // The check has to come first in each handler, not after a database read.
       for (const handler of source.split(/export async function /).slice(1)) {
         expect(handler, `${route}: a handler reads before it authenticates`).toMatch(/^[A-Z]+\(request(: Request)?\)\s*\{\s*const auth = await authenticate\(\)/);
+      }
+    }
+  });
+});
+
+describe("hechos, checklists y ubicación", () => {
+  const routes = () =>
+    apiRoutes().filter((r) => /api\/(facts|checklists|settings\/location)/.test(r));
+
+  it("hay rutas y authenticate() es requireAuth", () => {
+    expect(routes().length).toBeGreaterThanOrEqual(5);
+    expect(read("lib/checklist-route.ts")).toMatch(/requireAuth\s*\(/);
+  });
+
+  it("cada handler autentica antes de leer o escribir nada", () => {
+    for (const route of routes()) {
+      const source = read(route);
+      for (const handler of source.split(/export async function /).slice(1)) {
+        expect(handler, `${route}: un handler toca datos antes de autenticar`).toMatch(
+          /^[A-Z]+\((request: Request)?\)\s*\{\s*const auth = await authenticate(Paid)?\(\)/
+        );
+      }
+    }
+  });
+
+  it("ninguna lectura de hechos, listas o ubicación recibe un userId que no sea el autenticado", () => {
+    // Las rutas pasan `auth.userId` y nada que venga del cuerpo o de la URL.
+    for (const route of routes()) {
+      const source = read(route);
+      expect(source, route).not.toMatch(/body\.userId|searchParams\.get\("(user|userId|user_id)"\)/);
+    }
+  });
+
+  it("todas las consultas de esas tablas filtran por user_id", () => {
+    for (const file of ["lib/facts-storage.ts", "lib/checklists-storage.ts"]) {
+      const source = read(file);
+      const queries = source.match(/sql`[\s\S]*?`/g) ?? [];
+      expect(queries.length).toBeGreaterThan(0);
+      for (const query of queries) {
+        expect(query, `${file}: una consulta sin user_id`).toMatch(/user_id/);
       }
     }
   });

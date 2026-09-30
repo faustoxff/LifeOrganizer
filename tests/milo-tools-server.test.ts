@@ -17,6 +17,7 @@ vi.mock("@/lib/projects-storage", () => ({
   loadProjectRecords: (...a: unknown[]) => loadProjectRecords(...a),
   loadEstimateHistory: (...a: unknown[]) => loadEstimateHistory(...a)
 }));
+vi.mock("@/lib/facts-storage", () => ({ listFacts: vi.fn(async () => []), saveFact: vi.fn(async () => ({ status: "saved" })) }));
 vi.mock("@/lib/user-settings", () => ({ getAvailabilitySettings: (...a: unknown[]) => getAvailabilitySettings(...a) }));
 
 import { executeTool } from "@/lib/milo-tools";

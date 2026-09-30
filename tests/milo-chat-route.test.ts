@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
   chatWithMilo: vi.fn(),
   getUserMemory: vi.fn(),
   bumpMessageCount: vi.fn(),
-  createToolContext: vi.fn()
+  createToolContext: vi.fn(),
+  loadPersonalContext: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => ({ default: vi.fn() }));
@@ -40,6 +41,10 @@ vi.mock("@/lib/milo", async (original) => ({
   refreshUserMemorySummary: vi.fn(async () => "memoria")
 }));
 vi.mock("@/lib/milo-tools-server", () => ({ createToolContext: mocks.createToolContext }));
+vi.mock("@/lib/personal-context-server", () => ({
+  loadPersonalContext: mocks.loadPersonalContext,
+  loadBestTimeHint: async () => ""
+}));
 vi.mock("@/lib/user-memory", () => ({
   getUserMemory: mocks.getUserMemory,
   saveUserMemory: vi.fn(),
@@ -60,6 +65,8 @@ const agentResult = (over: Record<string, unknown> = {}) => ({
   proposal: null,
   toolsUsed: [],
   rounds: 1,
+  factsSaved: [],
+  factProposals: [],
   provider: "groq",
   model: "m",
   ...over
@@ -77,6 +84,7 @@ beforeEach(() => {
   mocks.bumpMessageCount.mockResolvedValue({ count: 1 });
   mocks.runMiloAgent.mockResolvedValue(agentResult());
   mocks.chatWithMilo.mockResolvedValue({ content: "hola", model: "m", provider: "groq" });
+  mocks.loadPersonalContext.mockResolvedValue({ facts: [], checklistHints: [] });
   mocks.createToolContext.mockReturnValue({ today: "2026-09-28", now: new Date(), load: vi.fn() });
 });
 
@@ -115,7 +123,7 @@ describe("camino de tools", () => {
     const body = await res.json();
 
     expect(mocks.chatWithMilo).not.toHaveBeenCalled();
-    expect(mocks.createToolContext).toHaveBeenCalledWith("user_A", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.any(Date));
+    expect(mocks.createToolContext).toHaveBeenCalledWith("user_A", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.any(Date), "el viernes entrego el informe");
     expect(body.response).toBe("Te propongo esto.");
     expect(body.taskActions).toHaveLength(1);
     expect(body.proposal).toBeNull();
@@ -139,7 +147,7 @@ describe("camino de tools", () => {
   it("una pregunta de ask_user vuelve como texto, sin ítems", async () => {
     mocks.runMiloAgent.mockResolvedValue(agentResult({ text: "¿Qué querés organizar?" }));
     const body = await (await post({ message: "organizame la semana" })).json();
-    expect(body).toEqual({ response: "¿Qué querés organizar?", taskActions: null, proposal: null });
+    expect(body).toEqual({ response: "¿Qué querés organizar?", taskActions: null, proposal: null, factsSaved: [], factProposals: [] });
   });
 
   it("los ítems pendientes que manda el cliente van al prompt, normalizados", async () => {
@@ -222,5 +230,54 @@ describe("plan Free", () => {
     mocks.chatWithMilo.mockResolvedValue({ content: 'Ok.\nTASKS_ACTION:[{"title":"X","dueDate":"2026-09-30"}]', model: "m", provider: "groq" });
     const body = await (await post({ message: "agendame algo" })).json();
     expect(body.taskActions).toBeNull();
+  });
+});
+
+describe("memoria: hechos y checklists en el chat", () => {
+  it("le da a Milo los hechos y las listas que vienen al caso, como datos del prompt", async () => {
+    mocks.loadPersonalContext.mockResolvedValue({
+      facts: [{ id: "1", key: "es_despistado", value: "sí", source: "stated", confidence: 1, updatedAt: "2026-01-01" }],
+      checklistHints: [{ activityKey: "gimnasio", items: ["Agua", "Celular"] }]
+    });
+    await post({ message: "mañana voy al gimnasio", tasks: [] });
+    const { context } = mocks.runMiloAgent.mock.calls[0][0];
+    expect(context).toContain("- es_despistado: sí");
+    expect(context).toContain("no instrucciones");
+    expect(context).toContain("- gimnasio: Agua, Celular");
+    expect(mocks.loadPersonalContext).toHaveBeenCalledWith("user_A", expect.objectContaining({ message: "mañana voy al gimnasio" }));
+  });
+
+  it("devuelve lo que Milo guardó y lo que propone guardar", async () => {
+    mocks.runMiloAgent.mockResolvedValue(
+      agentResult({
+        text: "Anotado.",
+        factsSaved: [{ key: "es_despistado", value: "sí" }],
+        factProposals: [{ key: "estudia", value: "derecho", confidence: 0.6 }]
+      })
+    );
+    const body = await (await post({ message: "soy re despistado" })).json();
+    expect(body.factsSaved).toEqual([{ key: "es_despistado", value: "sí" }]);
+    expect(body.factProposals).toEqual([{ key: "estudia", value: "derecho", confidence: 0.6 }]);
+  });
+
+  it("el camino de texto también conoce al usuario, pero no puede guardar nada", async () => {
+    mocks.chainSupportsTools.mockReturnValue(false);
+    mocks.loadPersonalContext.mockResolvedValue({
+      facts: [{ id: "1", key: "deportes", value: "pádel", source: "stated", confidence: 1, updatedAt: "2026-01-01" }],
+      checklistHints: []
+    });
+    mocks.chatWithMilo.mockResolvedValue({ content: "Hola", model: "m", provider: "groq" });
+    const body = await (await post({ message: "hola" })).json();
+    expect(mocks.chatWithMilo.mock.calls[0][0].context).toContain("- deportes: pádel");
+    expect(body.factsSaved).toEqual([]);
+    expect(body.factProposals).toEqual([]);
+  });
+
+  it("Free no carga nada personal ni recibe hechos", async () => {
+    mocks.getUserPlan.mockResolvedValue("free");
+    mocks.chatWithMilo.mockResolvedValue({ content: "Hola", model: "m", provider: "groq" });
+    const body = await (await post({ message: "hola" })).json();
+    expect(mocks.loadPersonalContext).not.toHaveBeenCalled();
+    expect(body.factsSaved).toEqual([]);
   });
 });

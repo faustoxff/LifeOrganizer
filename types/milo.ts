@@ -52,3 +52,16 @@ export interface WeekProposal {
   deferred: ProposalDeferred[];
   warnings: ProposalWarning[];
 }
+
+/** Un hecho que Milo guardó porque el usuario lo dijo (con sus palabras). */
+export interface SavedFact {
+  key: string;
+  value: string;
+}
+
+/** Un hecho que Milo dedujo: NO está guardado hasta que el usuario lo confirma. */
+export interface FactProposal {
+  key: string;
+  value: string;
+  confidence: number;
+}
