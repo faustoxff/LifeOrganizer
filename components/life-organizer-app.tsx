@@ -10,13 +10,17 @@ import { useAuth } from "@/components/auth-gate";
 import { useAppLanguage } from "@/components/language-provider";
 import { MiloChat } from "@/components/milo-chat";
 import { PlanZapIcon } from "@/components/plan-zap-icon";
+import { ScopeDialog } from "@/components/scope-dialog";
 import { getUserDisplayName } from "@/lib/auth";
 import { TaskForm } from "@/components/task-form";
 import { Button } from "@/components/ui/button";
 import { TextAnimate } from "@/components/ui/text-animate";
-import { formatTodayLongDate } from "@/lib/task-date";
+import { formatTodayLongDate, getDeviceTimeZone, getTodayDateValue } from "@/lib/task-date";
 import { celebrate } from "@/lib/celebrate";
 import { getCurrentBadge, getStreakFromCompletions } from "@/lib/streak";
+import { DEFAULT_ESTIMATE_MIN } from "@/lib/task-estimate";
+import { getSkippedDates, isFutureOccurrence, isRecommendable, isSkipped } from "@/lib/task-views";
+import type { EditScope } from "@/lib/task-validation";
 import { focusCopy, reminderCopy } from "@/lib/focus-copy";
 import { useReminders } from "@/lib/use-reminders";
 import { useUserPlan } from "@/lib/use-user-plan";
@@ -50,6 +54,11 @@ export function LifeOrganizerApp() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Editing or deleting one occurrence of a repeating task asks for the scope
+  // first; the action waits here until the user picks.
+  const [scopePrompt, setScopePrompt] = useState<
+    { action: "edit"; input: TaskInput } | { action: "delete"; taskId: string } | null
+  >(null);
   // On small screens the tasks and the Milo chat are separate tabs; on desktop both are visible.
   const [mobileTab, setMobileTab] = useState<"tasks" | "chat">("tasks");
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
@@ -100,14 +109,22 @@ export function LifeOrganizerApp() {
   const aiRecommendationCacheRef = useRef(new Map<string, AiPriorityRecommendation>());
   const todayLabel = formatTodayLongDate(language);
 
+  // The browser's timezone travels with every load: the server stores it and
+  // uses it for "today", and the same request brings the series up to date
+  // (skips what fell behind, creates the next two weeks).
+  async function fetchTasks() {
+    const res = await fetch(`/api/tasks?tz=${encodeURIComponent(getDeviceTimeZone())}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as { tasks: Task[] };
+    return data.tasks;
+  }
+
   useEffect(() => {
     let active = true;
     async function load() {
       try {
-        const res = await fetch("/api/tasks");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { tasks: Task[] };
-        if (active) { setTasks(data.tasks); setStorageError(""); }
+        const loaded = await fetchTasks();
+        if (active) { setTasks(loaded); setStorageError(""); }
       } catch (err) {
         if (active) setStorageError(getErrorMessage(err, FALLBACK_STORAGE_ERROR_MESSAGE));
       } finally {
@@ -118,12 +135,38 @@ export function LifeOrganizerApp() {
     return () => { active = false; };
   }, []);
 
-  const pendingTasks = useMemo(() => tasks.filter((t) => !t.done), [tasks]);
+  // Several rows can change at once (a series was cut and another created), so
+  // those operations reload instead of patching local state row by row.
+  async function reloadTasks() {
+    try {
+      setTasks(await fetchTasks());
+      setStorageError("");
+    } catch (err) {
+      setStorageError(getErrorMessage(err, copy.errors.unexpected));
+    }
+  }
+
+  const today = getTodayDateValue();
+
+  // A skipped occurrence is history nobody needs to see: it is out of the
+  // calendar, the list, the counts and the AI, but its day still counts for the
+  // streak (as neutral) so it is kept in `tasks`.
+  const visibleTasks = useMemo(() => tasks.filter((t) => !isSkipped(t)), [tasks]);
+  // What "today" works with: no skipped rows and no future occurrences. Milo,
+  // the reminder nudge and the recommendation only look at this.
+  const todayTasks = useMemo(
+    () => visibleTasks.filter((t) => !isFutureOccurrence(t, today)),
+    [visibleTasks, today]
+  );
+  const pendingTasks = useMemo(
+    () => visibleTasks.filter((t) => isRecommendable(t, today)),
+    [visibleTasks, today]
+  );
 
   const aiRequestTasks = useMemo(() =>
     [...pendingTasks]
-      .map(({ id, title, category, description, priority, duration, dueDate }) =>
-        ({ id, title, category, description, priority, duration, dueDate })
+      .map(({ id, title, category, description, priority, estimateMin, dueDate }) =>
+        ({ id, title, category, description, priority, estimateMin, dueDate })
       )
       .sort((a, b) => a.id.localeCompare(b.id)),
     [pendingTasks]
@@ -170,14 +213,15 @@ export function LifeOrganizerApp() {
     return () => ctrl.abort();
   }, [aiRequestKey, aiRequestTasks, isLoaded, language, pendingTasks.length]);
 
-  const reminders = useReminders(tasks, language, isLoaded, user.id);
+  const reminders = useReminders(todayTasks, language, isLoaded, user.id);
   const focusTask = focusTaskId ? tasks.find((t) => t.id === focusTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((t) => t.id === editingTaskId) ?? null : null;
 
   async function handleCreateTask(input: TaskInput) {
     setIsSyncing(true);
     try {
-      const newTask: Task = { id: crypto.randomUUID(), ...input, done: false };
+      // With `repeat` the server creates a series instead of a single task.
+      const newTask = { id: crypto.randomUUID(), ...input, done: false, status: "pending" };
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,8 +242,13 @@ export function LifeOrganizerApp() {
         return false;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { task: Task };
-      setTasks((prev) => [data.task, ...prev]);
+      const data = (await res.json()) as { task: Task | null; tasks?: Task[] };
+      // A series answers with its first occurrences; a plain task with one row.
+      const created = data.tasks ?? (data.task ? [data.task] : []);
+      setTasks((prev) => {
+        const ids = new Set(created.map((t) => t.id));
+        return [...created, ...prev.filter((t) => !ids.has(t.id))];
+      });
       setStorageError("");
       setTaskLimitReached(false);
       return true;
@@ -212,20 +261,39 @@ export function LifeOrganizerApp() {
     }
   }
 
+  // Only a pending occurrence can be cut ("this and the following"); a done one
+  // has already happened, so it is just edited.
+  const hasScope = (task: Task | undefined) =>
+    Boolean(task?.seriesId) && task?.status === "pending" && !task?.done;
+
   async function handleUpdateTask(input: TaskInput) {
     if (!editingTaskId) return false;
     const current = tasks.find((t) => t.id === editingTaskId);
     if (!current) { setEditingTaskId(null); return false; }
+    if (hasScope(current)) {
+      // Not saved yet: the form stays open behind the dialog.
+      setScopePrompt({ action: "edit", input });
+      return false;
+    }
+    return saveTaskEdit(current, input, "this");
+  }
+
+  async function saveTaskEdit(current: Task, input: TaskInput, scope: EditScope) {
     setIsSyncing(true);
     try {
       const res = await fetch("/api/tasks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...current, ...input })
+        body: JSON.stringify({ ...current, ...input, scope })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { task: Task };
-      setTasks((prev) => prev.map((t) => (t.id === data.task.id ? data.task : t)));
+      const data = (await res.json()) as { task?: Task; reload?: boolean };
+      if (data.reload) {
+        await reloadTasks();
+      } else if (data.task) {
+        const updated = data.task;
+        setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      }
       setEditingTaskId(null);
       setShowForm(false);
       setStorageError("");
@@ -265,12 +333,25 @@ export function LifeOrganizerApp() {
   }
 
   async function handleDeleteTask(taskId: string) {
+    if (hasScope(tasks.find((t) => t.id === taskId))) {
+      setScopePrompt({ action: "delete", taskId });
+      return;
+    }
+    await deleteTask(taskId, "this");
+  }
+
+  async function deleteTask(taskId: string, scope: EditScope) {
     setIsSyncing(true);
     try {
-      const res = await fetch(`/api/tasks?id=${encodeURIComponent(taskId)}`, { method: "DELETE" });
+      const res = await fetch(
+        `/api/tasks?id=${encodeURIComponent(taskId)}&scope=${scope}`,
+        { method: "DELETE" }
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json().catch(() => ({}))) as { reload?: boolean };
       if (editingTaskId === taskId) { setEditingTaskId(null); setShowForm(false); }
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (data.reload) await reloadTasks();
+      else setTasks((prev) => prev.filter((t) => t.id !== taskId));
       setStorageError("");
     } catch (err) {
       setStorageError(getErrorMessage(err, copy.errors.unexpected));
@@ -279,9 +360,25 @@ export function LifeOrganizerApp() {
     }
   }
 
+  async function handleScopeChoice(scope: EditScope) {
+    const prompt = scopePrompt;
+    setScopePrompt(null);
+    if (!prompt) return;
+    if (prompt.action === "delete") {
+      await deleteTask(prompt.taskId, scope);
+      return;
+    }
+    const current = tasks.find((t) => t.id === editingTaskId);
+    if (current) await saveTaskEdit(current, prompt.input, scope);
+  }
+
   /** Shows the celebration the first time a milestone is reached. */
   function checkGemUnlock(nextTasks: Task[]) {
-    const streak = getStreakFromCompletions(nextTasks.map((t) => (t.done ? t.completedAt : undefined)));
+    // Skipped occurrences ride along so their days neither add to the streak nor break it.
+    const streak = getStreakFromCompletions(
+      nextTasks.map((t) => (t.done ? t.completedAt : undefined)),
+      getSkippedDates(nextTasks)
+    );
     const badge = getCurrentBadge(streak);
     if (!badge) return;
 
@@ -359,8 +456,11 @@ export function LifeOrganizerApp() {
       category: "general",
       description: "",
       priority: "medium",
-      duration: "medium",
-      dueDate: new Date().toISOString().slice(0, 10)
+      estimateMin: DEFAULT_ESTIMATE_MIN,
+      // The device's calendar day: toISOString() is UTC and is already
+      // "tomorrow" in the evening for anyone west of it.
+      dueDate: getTodayDateValue(),
+      kind: "task"
     });
   }
 
@@ -530,14 +630,14 @@ export function LifeOrganizerApp() {
           )}
         >
           <div className="flex w-full lg:w-[360px] lg:flex-shrink-0">
-            <MiloChat tasks={tasks} onCreateTask={handleCreateTask} />
+            <MiloChat tasks={todayTasks} onCreateTask={handleCreateTask} />
           </div>
         </div>
 
         {/* Right: Calendar + tasks */}
         <main className={cn("min-w-0 flex-1 overflow-hidden lg:block", mobileTab === "tasks" ? "block" : "hidden")}>
           <CalendarView
-            allTasks={tasks}
+            allTasks={visibleTasks}
             isMutating={isSyncing}
             aiRecommendation={aiRecommendation}
             isAiLoading={isAiLoading}
@@ -596,6 +696,14 @@ export function LifeOrganizerApp() {
         ))}
       </nav>
 
+      {scopePrompt && (
+        <ScopeDialog
+          action={scopePrompt.action}
+          onChoose={(scope) => void handleScopeChoice(scope)}
+          onCancel={() => setScopePrompt(null)}
+        />
+      )}
+
       {/* Task form modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -610,13 +718,16 @@ export function LifeOrganizerApp() {
               <X className="h-4 w-4" />
             </Button>
             <TaskForm
+              key={editingTask?.id ?? "new"}
               initialValues={editingTask ? {
                 title: editingTask.title,
                 category: editingTask.category,
                 description: editingTask.description,
                 priority: editingTask.priority,
-                duration: editingTask.duration,
-                dueDate: editingTask.dueDate
+                estimateMin: editingTask.estimateMin,
+                dueDate: editingTask.dueDate,
+                kind: editingTask.kind,
+                ...(editingTask.time ? { time: editingTask.time } : {})
               } : undefined}
               isSubmitting={isSyncing}
               mode={editingTask ? "edit" : "create"}

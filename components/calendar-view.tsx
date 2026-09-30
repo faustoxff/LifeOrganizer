@@ -3,13 +3,14 @@
 import Image from "next/image";
 import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Play, SlidersHorizontal, Trash2, Sparkles } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Play, Repeat, SlidersHorizontal, Trash2, Sparkles } from "lucide-react";
 import { useAppLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { MiloLoader } from "@/components/milo-loader";
 import { cn } from "@/lib/utils";
 import { formatDueDate, getDueDateLabel } from "@/lib/task-date";
-import { getTaskPriorityLabel } from "@/lib/task-labels";
+import { getTaskDurationLabel, getTaskPriorityLabel } from "@/lib/task-labels";
+import { getTodayReminders, isFutureOccurrence, isRecommendable, isVisibleInToday } from "@/lib/task-views";
 import { emptyStateCopy, focusCopy, monthCopy, quickAddCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { Input } from "@/components/ui/input";
@@ -129,10 +130,19 @@ export function CalendarView({
     return acc;
   }, {});
 
-  const pendingCount = useMemo(() => allTasks.filter((t) => !t.done).length, [allTasks]);
+  // What "today" shows: pending, not skipped, and no future occurrences of a
+  // series (those live in the calendar until their day comes).
+  const pendingCount = useMemo(
+    () => allTasks.filter((t) => isVisibleInToday(t, todayKey)).length,
+    [allTasks, todayKey]
+  );
 
+  const todayReminders = useMemo(() => getTodayReminders(allTasks, todayKey), [allTasks, todayKey]);
+  const todayReminderIds = useMemo(() => new Set(todayReminders.map((t) => t.id)), [todayReminders]);
+
+  // Reminders never compete as "the" recommended task, even if the AI names one.
   const recommendedTask = aiRecommendation
-    ? allTasks.find((t) => t.id === aiRecommendation.recommendedTaskId && !t.done)
+    ? allTasks.find((t) => t.id === aiRecommendation.recommendedTaskId && isRecommendable(t, todayKey))
     : null;
 
   // Pending first (soonest due date first); completed ones after, most recent first.
@@ -148,13 +158,19 @@ export function CalendarView({
   const isThisMonth = (task: Task) => (task.completedAt ?? task.dueDate).slice(0, 10) >= monthStart;
 
   const dayTasksSelected = selectedKey ? (tasksByDate[selectedKey] ?? []) : null;
-  const pendingList = (dayTasksSelected ?? allTasks).filter((t) => !t.done).sort(byDueAsc);
-  const allDone = (dayTasksSelected ?? allTasks).filter((t) => t.done).sort(byDoneDesc);
+  // Without a selected day the list is "today": future occurrences of a series
+  // stay out of it. Picking a day in the calendar shows everything on that day.
+  const listSource = dayTasksSelected ?? allTasks.filter((t) => !isFutureOccurrence(t, todayKey));
+  const pendingList = listSource.filter((t) => !t.done).sort(byDueAsc);
+  const allDone = listSource.filter((t) => t.done).sort(byDoneDesc);
   const doneThisMonth = allDone.filter(isThisMonth);
   const doneOlder = allDone.filter((t) => !isThisMonth(t));
   const doneList = showOlder ? allDone : doneThisMonth;
   // The recommended task already has its own card above, so it is not repeated in the list.
-  const listPending = selectedKey ? pendingList : pendingList.filter((t) => t.id !== recommendedTask?.id);
+  // Today's reminders have their own section, so they are not repeated here either.
+  const listPending = selectedKey
+    ? pendingList
+    : pendingList.filter((t) => t.id !== recommendedTask?.id && !todayReminderIds.has(t.id));
   const displayedTasks = [...listPending, ...(selectedKey ? doneList : [])];
 
   function prevMonth() {
@@ -361,6 +377,61 @@ export function CalendarView({
           </div>
         )}
 
+        {/* Today's reminders: timed one-liners that never compete as the recommended task */}
+        {todayReminders.length > 0 && (
+          <div className="px-5 pt-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              <Bell className="h-3.5 w-3.5" />
+              {copy.calendar.todayReminders}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {todayReminders.map((task) => (
+                <li
+                  key={task.id}
+                  className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2 transition-colors hover:bg-secondary/30"
+                >
+                  <button
+                    onClick={() => void onToggleTask(task.id)}
+                    disabled={isMutating}
+                    className="flex-shrink-0 text-muted-foreground transition-colors hover:text-primary disabled:opacity-50"
+                    aria-label={copy.taskList.markDone}
+                  >
+                    <Circle className="h-4 w-4" />
+                  </button>
+                  {task.time && (
+                    <span className="flex-shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-primary">
+                      {task.time}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                  {task.dueDate < todayKey && (
+                    <span className="flex-shrink-0 text-[11px] text-red-400">{getDueDateLabel(task.dueDate, language)}</span>
+                  )}
+                  {task.seriesId && <Repeat className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-label={copy.taskList.repeats} />}
+                  <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                    <button
+                      onClick={() => onEditTask(task.id)}
+                      disabled={isMutating}
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                      aria-label={copy.taskList.edit}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => void onDeleteTask(task.id)}
+                      disabled={isMutating}
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+                      aria-label={copy.common.delete}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Calendar */}
         <div className="px-5 py-3">
           {/* Month navigation */}
@@ -553,6 +624,28 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
           <span className="text-xs text-muted-foreground">
             {getDueDateLabel(task.dueDate, language)} · {formatDueDate(task.dueDate, language)}
           </span>
+          {task.time && (
+            <span className="text-xs font-medium tabular-nums text-muted-foreground">{task.time}</span>
+          )}
+          {task.kind === "project" && (
+            <span className="inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              {copy.taskForm.kinds.project}
+            </span>
+          )}
+          {task.kind === "reminder" && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+              <Bell className="h-2.5 w-2.5" />
+              {copy.taskForm.kinds.reminder}
+            </span>
+          )}
+          {task.kind !== "reminder" && (
+            <span className="text-xs text-muted-foreground">{getTaskDurationLabel(task.estimateMin)}</span>
+          )}
+          {task.seriesId && (
+            <Repeat className="h-3 w-3 text-muted-foreground" aria-label={copy.taskList.repeats}>
+              <title>{copy.taskList.repeats}</title>
+            </Repeat>
+          )}
           <PriorityPill priority={task.priority} language={language} />
           {steps.length > 0 && (
             <span className="text-xs font-medium text-primary/90">

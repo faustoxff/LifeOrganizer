@@ -113,6 +113,22 @@ actual_min, created_at`.
 
 ### Límites
 
-- El tope de Free (15 tareas) cuenta solo tareas sueltas (`series_id IS NULL`):
-  las ocurrencias las genera el sistema, no el usuario. El tope duro de 1000 filas
-  las cuenta a todas, y hay un máximo de 30 series activas por usuario.
+- El tope de Free (15) cuenta las tareas sueltas (`series_id IS NULL`) **más una por
+  cada serie activa**, sin importar cuántas ocurrencias genere: las ocurrencias las
+  crea el sistema, no el usuario, y una serie diaria no debería bloquear al usuario
+  por dos semanas.
+- Hay un máximo de 30 series activas por usuario (todos los planes) y el tope duro de
+  1000 filas cuenta también las ocurrencias.
+- Las ocurrencias `skipped` y las ya hechas no se purgan todavía. Con series diarias
+  acumulan filas hacia el tope de 1000: una limpieza periódica queda pendiente.
+
+### Decisiones de la etapa 1
+
+- Borrar "solo esta" ocurrencia la marca `skipped` en vez de borrar la fila: si se
+  borrara, la fecha caería dentro de la ventana y `ensureOccurrences` la volvería a
+  crear.
+- "Esta y las siguientes" solo se ofrece sobre una ocurrencia pendiente, y no permite
+  cambiar la regla ni la fecha: para eso se crea una serie nueva.
+- Proyecto ↔ tarea: una ocurrencia no puede pasar a proyecto (los proyectos no se repiten).
+- Milo solo ve en su prompt las ocurrencias de hoy, no las futuras. La planificación
+  semanal con las series completas llega en la etapa 4.

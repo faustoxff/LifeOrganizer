@@ -9,6 +9,13 @@ export type LegacyDuration = "short" | "medium" | "long";
 export const ESTIMATE_OPTIONS_MIN = [15, 30, 45, 60, 90, 120] as const;
 
 export const DEFAULT_ESTIMATE_MIN = 45;
+
+/** Cuánto dura si nadie lo dijo: un recordatorio son minutos, un proyecto horas. */
+export const DEFAULT_ESTIMATE_BY_KIND = {
+  reminder: 5,
+  task: DEFAULT_ESTIMATE_MIN,
+  project: 120
+} as const;
 export const MIN_ESTIMATE_MIN = 1;
 export const MAX_ESTIMATE_MIN = 24 * 60;
 

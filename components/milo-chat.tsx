@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle, Loader2, Mic, MicOff, Send, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, Mic, MicOff, Repeat, Send, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { MiloLoader } from "@/components/milo-loader";
@@ -11,6 +11,7 @@ import { useAppLanguage } from "@/components/language-provider";
 import { MiloAvatar } from "@/components/milo-avatar";
 import { micCopy } from "@/lib/focus-copy";
 import { type MiloFace } from "@/lib/milo-face";
+import { describeRepeat } from "@/lib/repeat-label";
 import { formatDueDate } from "@/lib/task-date";
 import { getTaskPriorityLabel } from "@/lib/task-labels";
 import { useVoiceInput } from "@/lib/use-voice-input";
@@ -350,8 +351,22 @@ export function MiloChat({
                     <div key={idx} className="rounded-lg bg-background/60 px-2.5 py-1.5">
                       <p className="text-sm font-medium text-foreground">{action.title}</p>
                       <p className="text-xs text-muted-foreground">
+                        {action.kind && action.kind !== "task" ? `${copy.taskForm.kinds[action.kind]} · ` : ""}
                         {action.category} · {getTaskPriorityLabel(action.priority, language)} · {formatDueDate(action.dueDate, language)}
+                        {action.time ? ` · ${action.time}` : ""}
                       </p>
+                      {action.repeat && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-primary/90">
+                          <Repeat className="h-3 w-3" />
+                          {describeRepeat(action.repeat, language, {
+                            repeatOptions: copy.taskForm.repeatOptions,
+                            repeatEvery: copy.taskForm.repeatEvery,
+                            repeatWeeks: copy.taskForm.repeatWeeks,
+                            repeatDays: copy.taskForm.repeatDays,
+                            repeatMonths: copy.taskForm.repeatMonths
+                          }, action.dueDate)}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
