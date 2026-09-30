@@ -194,9 +194,9 @@ gastó (0 si termina antes del objetivo, 100 si no es factible).
 
 **Si no entra no se inventa un plan imposible**: se devuelve lo que sí entra antes del
 deadline, `feasible = false`, `shortfallMin` y `options` calculadas re-planificando:
-`extraMinPerDay` (minutos extra por día, en todos los días hasta el deadline, que
-harían falta; `null` si ni con 24 h por día alcanza, p. ej. una cadena de dependencias
-más larga que los días) y `achievableDeadline` (la fecha más cercana que sí alcanzaría
+`extraMinPerDay` (minutos extra por día que harían falta, sumados solo a los días que
+ya tienen disponibilidad: un día en 0 sigue en 0; `null` si ni con 24 h por día
+alcanza, p. ej. una cadena de dependencias más larga que los días) y `achievableDeadline` (la fecha más cercana que sí alcanzaría
 con la disponibilidad actual, o `null`).
 
 `OVERLOADED_DAY` avisa de un día donde la carga fija ya supera la disponibilidad.
