@@ -636,3 +636,72 @@ Solo para `kind = 'task'` con más de 15 min, y para las sesiones de subtareas d
   Sin medición propia de la categoría se usa el global aprendido; sin global, 1.3 en proyectos y 1
   (la estimación tal cual) en `plan_week`, como antes.
 - Textos de esta etapa: es y en escritos a mano; los demás idiomas muestran el inglés.
+
+## Etapa 7: Spark sabe qué hacer ahora (agenda ocupada y recomendación según el momento)
+
+Hasta acá la recomendación del día no miraba el reloj: elegía lo más importante aunque el usuario
+tuviera 20 minutos hasta un compromiso. Esta etapa le da a Spark la noción de "cuánto tiempo tengo
+ahora" y recomienda con eso. **La elección es determinística** (`lib/recommendation.ts`, sin IA); la
+IA (Milo) solo la cuenta.
+
+### 1. Agenda ocupada (`lib/busy-blocks.ts`, puro)
+
+- `BusyBlock { id, start, end (ISO), title, source: 'reminder' | 'calendar' | 'manual', importance:
+  'low' | 'normal' | 'high', prepMin }`.
+- `collectBusyBlocks(tasks, …)`: los recordatorios con hora (bloque corto) y las tareas que el usuario fijó
+  a una hora (`manual`, con su duración). Las sesiones de proyecto no tienen hora, así que no son
+  bloques: el scheduler decide el día, no la hora. La hora local se convierte a instante con la zona del
+  usuario (`localToInstant`).
+- **Punto de extensión** para Google Calendar: `lib/busy-blocks-server.ts` junta las fuentes de un
+  registro (`busyBlockSources`). Una fuente nueva devuelve `BusyBlock[]` con `source: 'calendar'` y nadie
+  más cambia. Hoy el registro está vacío.
+- `prepMin`: margen antes del compromiso (viaje, prepararse). Default 15 min para `calendar`, 0 para
+  recordatorios y tareas con hora. Configurable por usuario en ajustes (`user_settings`).
+- `getFreeWindow(now, blocks, …)`: minutos libres desde ahora hasta el próximo bloque (restando su
+  `prepMin`) y cuál es. Sin bloques, hasta el fin del día (medianoche local) acotado por la
+  disponibilidad del día. Un bloque ya empezado da 0 min y se informa como "estás en…".
+- **No se agenda nada encima de un bloque.** El scheduler y `plan_week` trabajan por día (no eligen una
+  hora), así que un bloque resta su tiempo (más el margen) a la capacidad de ese día. Lo que ya cuenta como
+  carga fija (recordatorios y tareas con hora, por su estimado) no se descuenta dos veces: de esos solo se
+  suma el margen. La recomendación, que sí trabaja con la hora, no se superpone con ninguno.
+
+### 2. Recomendación según el momento (`lib/recommendation.ts`)
+
+`getRecommendedTask(tasks, ctx)` con `ctx = { now, timeZone, window, energy?, patterns }`:
+
+- Solo entran las tareas cuya estimación, ajustada con el factor por categoría del usuario, cabe en
+  `freeMin`. Una tarea que no cabe se puede **avanzar** si es de proyecto o tiene pasos y hay un bloque útil
+  (>= 25 min): se propone "avanzar X min" y no terminarla.
+- Nada entra, o lo que entra es prioridad baja y sin vencimiento cercano (más de 2 días) → recomendación
+  `rest` o `prepare` con el motivo. `prepare` si el próximo bloque es de importancia alta o de calendario.
+- **Excepción**: algo que vence hoy (o vencido) y entra se recomienda aunque haya un evento cerca.
+- Horario aprendido: +1 a las tareas pesadas en la franja donde el usuario rinde más. Solo desempata
+  entre tareas de la misma urgencia: nunca pasa por encima de una fecha límite más cercana.
+- "Estoy cansado": prefiere lo corto y liviano; lo que vence hoy sigue entrando.
+- Devuelve la lista ordenada de opciones (para "Otra") y una razón estructurada (`code` + datos) que la
+  UI y Milo muestran en una línea.
+
+### 3. UI
+
+En la tarjeta de "hoy": "Tenés ~40 min libres (hasta Kinesiología 11:00)"; chips 15 min / 30 min / 1 h /
+Más y "Estoy cansado"; tarjetas propias de `rest` y `prepare` (con la checklist de la actividad si
+existe); botón "Otra". La elección manual vale hasta que cambie el próximo bloque o pasen 60 minutos.
+Un valor manual nunca pasa por encima del próximo bloque real.
+
+### 4. Milo
+
+Tool `what_should_i_do_now({ availableMin?, energy? })`, solo lectura, con la misma función. Sin tiempo
+dicho usa la ventana libre calculada.
+
+### Decisiones de la etapa 7
+
+- **La tarjeta que ve el usuario es la de `calendar-view`** (alimentada por `/api/ai-priority`); el
+  componente `recommendation-card.tsx` y `getRecommendedTask` de `task-score.ts` no estaban en uso. La
+  recomendación nueva reemplaza a la de IA en esa tarjeta, así que la app deja de llamar a
+  `/api/ai-priority` (ahorra cupo). La ruta queda sin tocar. La función vieja pasa a
+  `getTopScoredTask`.
+- La recomendación sigue siendo de Plus/Pro, como antes.
+- Sin bloques, "el fin del día según la disponibilidad" es el menor entre lo que falta para la medianoche y
+  los minutos de disponibilidad de hoy.
+- Las tareas de proyecto compiten por sus **sesiones de hoy** (con su duración), no por la fila del
+  proyecto.
