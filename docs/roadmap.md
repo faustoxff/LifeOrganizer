@@ -623,3 +623,16 @@ Solo para `kind = 'task'` con más de 15 min, y para las sesiones de subtareas d
 - Solo cuentan `task` y subtareas para las franjas; un recordatorio tildado no es trabajo.
 - **Orden de despliegue**: aplicar la migración **antes** de desplegar; completar una tarea ahora escribe
   las columnas nuevas.
+- **El foco también termina tareas sin pasos** (botón "listo"): es donde se mide cuánto tardó. Si se
+  cierra el foco sin terminar, los minutos que corrió el timer se suman a `actual_min`
+  (`PATCH /api/tasks { taskId, progressMin }`), así que una tarea que se termina otro día no pierde lo
+  trabajado. Reabrir una tarea borra `completed_hour` pero conserva `actual_min`.
+- **`GET /api/patterns` no depende del plan** (es estadística sobre los datos del propio usuario, sin
+  IA ni costo). La sección de stats sigue siendo Pro porque toda la pantalla lo es. `get_my_patterns`
+  es una tool de Milo, o sea Plus/Pro.
+- **Saltear una subtarea** cuenta como postergarla, una vez por día: saltear dos veces para el mismo
+  día no suma dos.
+- El scheduler de proyectos usa el factor de la categoría del proyecto y `plan_week` el de cada ítem.
+  Sin medición propia de la categoría se usa el global aprendido; sin global, 1.3 en proyectos y 1
+  (la estimación tal cual) en `plan_week`, como antes.
+- Textos de esta etapa: es y en escritos a mano; los demás idiomas muestran el inglés.
