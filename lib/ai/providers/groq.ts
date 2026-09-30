@@ -20,6 +20,7 @@ export const groqProvider: ProviderAdapter = {
   id: "groq",
   label: "Groq",
   supportsReasoningEffort: false,
+  supportsVision: false,
 
   configured() {
     return Boolean(process.env.GROQ_API_KEY);
@@ -31,6 +32,9 @@ export const groqProvider: ProviderAdapter = {
     }
     if (tier === "pro") {
       return process.env.GROQ_PRO_MODEL ?? "openai/gpt-oss-120b";
+    }
+    if (tier === "planner") {
+      return process.env.GROQ_PLANNER_MODEL ?? process.env.GROQ_PRO_MODEL ?? "openai/gpt-oss-120b";
     }
     return process.env.GROQ_MODEL ?? "qwen/qwen3.8-27b";
   },

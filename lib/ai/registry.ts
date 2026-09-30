@@ -37,6 +37,15 @@ export function getProviderChain(): ProviderAdapter[] {
 }
 
 /**
+ * Whether any configured provider can read images. False today: the adapters send
+ * text-only messages. The project flow asks this so it can leave images out and say
+ * so, instead of accepting a file it would silently ignore.
+ */
+export function chainSupportsVision(): boolean {
+  return getProviderChain().some((provider) => provider.configured() && provider.supportsVision === true);
+}
+
+/**
  * The chain, re-ordered to start just after `providerId`.
  *
  * Used when a reply comes back unusable — empty, or cut off mid-`TASKS_ACTION`

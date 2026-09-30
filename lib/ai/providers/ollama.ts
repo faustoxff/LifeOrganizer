@@ -23,6 +23,7 @@ export const ollamaProvider = createOpenAICompatibleProvider({
   models: {
     fast: process.env.OLLAMA_FAST_MODEL ?? "gpt-oss:20b",
     standard: process.env.OLLAMA_MODEL ?? "gpt-oss:120b",
-    pro: process.env.OLLAMA_PRO_MODEL ?? "gpt-oss:120b"
+    pro: process.env.OLLAMA_PRO_MODEL ?? "gpt-oss:120b",
+    planner: process.env.OLLAMA_PLANNER_MODEL ?? process.env.OLLAMA_PRO_MODEL ?? "gpt-oss:120b"
   }
 });

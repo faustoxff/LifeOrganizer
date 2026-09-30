@@ -318,3 +318,27 @@ describe("chat failure classification", () => {
     expect(failure).toMatchObject({ busy: false, timedOut: false });
   });
 });
+
+describe("tier planner", () => {
+  it("cae en el modelo pro cuando no hay uno propio, y se puede sobrescribir", async () => {
+    const { groqProvider } = await import("@/lib/ai/providers/groq");
+    const { ollamaProvider } = await import("@/lib/ai/providers/ollama");
+    const saved = { g: process.env.GROQ_PLANNER_MODEL, o: process.env.OLLAMA_PLANNER_MODEL };
+    delete process.env.GROQ_PLANNER_MODEL;
+    try {
+      expect(groqProvider.modelFor("planner")).toBe(groqProvider.modelFor("pro"));
+      process.env.GROQ_PLANNER_MODEL = "modelo-grande";
+      expect(groqProvider.modelFor("planner")).toBe("modelo-grande");
+      expect(groqProvider.modelFor("pro")).not.toBe("modelo-grande");
+      expect(ollamaProvider.modelFor("planner")).toBeTruthy();
+    } finally {
+      if (saved.g === undefined) delete process.env.GROQ_PLANNER_MODEL; else process.env.GROQ_PLANNER_MODEL = saved.g;
+      if (saved.o === undefined) delete process.env.OLLAMA_PLANNER_MODEL; else process.env.OLLAMA_PLANNER_MODEL = saved.o;
+    }
+  });
+
+  it("ningún proveedor declara visión, así que el flujo de proyectos deja las imágenes afuera", async () => {
+    const { chainSupportsVision } = await import("@/lib/ai/registry");
+    expect(chainSupportsVision()).toBe(false);
+  });
+});

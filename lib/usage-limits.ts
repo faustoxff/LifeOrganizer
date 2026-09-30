@@ -10,7 +10,9 @@ export type UsageKind =
   | "ai_task_steps"
   | "milo_companion"
   | "stats_blurb"
-  | "transcribe";
+  | "transcribe"
+  | "project_intake"
+  | "project_plan";
 
 // Max AI calls per user per day (UTC), by plan. Tune these as costs become clear.
 export const DAILY_LIMITS: Record<UsageKind, Record<UserPlan, number>> = {
@@ -25,7 +27,12 @@ export const DAILY_LIMITS: Record<UsageKind, Record<UserPlan, number>> = {
   // refresh the page in a loop and spend tokens nobody was accounting for.
   stats_blurb: { free: 0, plus: 0, pro: 60 },
   // Voice dictation: each use is one short audio clip.
-  transcribe: { free: 20, plus: 100, pro: 300 }
+  transcribe: { free: 20, plus: 100, pro: 300 },
+  // Projects are Plus/Pro. Intake is a short call (and file summaries share its
+  // budget); a plan is the expensive one — a large prompt on the `planner` tier,
+  // possibly twice when the first answer is invalid — so it gets the tighter number.
+  project_intake: { free: 0, plus: 15, pro: 40 },
+  project_plan: { free: 0, plus: 6, pro: 20 }
 };
 
 // Hard cap on stored tasks for any plan (free is further limited in the tasks route).

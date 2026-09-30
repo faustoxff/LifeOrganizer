@@ -17,8 +17,13 @@ export type ChatMessage = { role: ChatRole; content: string };
  * from the text: a deterministic guess at "is this message simple" is a guess,
  * and a wrong guess either costs quality or costs money. The cheap callers
  * (memory summaries, companion nudges) know they are cheap.
+ *
+ * `planner` is for splitting a whole project into subtasks. It is its own tier
+ * (rather than reusing `pro`) so it can be pointed at a stronger model without
+ * making every Pro chat turn pay for it; with no override it falls back to the
+ * `pro` model.
  */
-export type ModelTier = "fast" | "standard" | "pro";
+export type ModelTier = "fast" | "standard" | "pro" | "planner";
 
 export type TokenUsage = {
   inputTokens: number;
@@ -221,6 +226,11 @@ export type ProviderAdapter = {
   modelFor(tier: ModelTier): string;
   complete(request: ProviderRequest): Promise<Completion>;
   supportsReasoningEffort?: boolean;
+  /**
+   * Whether the configured models can read images. Messages are plain text today,
+   * so no adapter claims it; the project flow leaves images out because of it.
+   */
+  supportsVision?: boolean;
 };
 
 /** Whether a failure should count against the provider's health.
