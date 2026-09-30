@@ -15,6 +15,7 @@
  *   npm run eval:milo -- --filter recurrencia
  *   npm run eval:milo -- --model default --repeat 3
  *   npm run eval:milo -- --provider ollama
+ *   npm run eval:milo -- --mode legacy    (baseline: el camino de TASKS_ACTION)
  */
 import { spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
@@ -28,6 +29,7 @@ const FLAGS = {
   repeat: "EVAL_REPEAT",
   model: "EVAL_MODEL",
   provider: "EVAL_PROVIDER",
+  mode: "EVAL_MODE",
   transcript: "EVAL_TRANSCRIPT"
 };
 

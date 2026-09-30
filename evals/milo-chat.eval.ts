@@ -1,11 +1,15 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, afterAll } from "vitest";
+import { chainSupportsTools } from "@/lib/ai/registry";
+import { DEFAULT_AVAILABILITY } from "@/lib/availability";
 import { chatWithMilo, classifyChatFailure } from "@/lib/milo";
+import { runMiloAgent } from "@/lib/milo-agent";
 import { buildTaskPromptParts } from "@/lib/milo-chat-prompt";
+import type { ScheduleData, ToolContext } from "@/lib/milo-tools";
 import { parseTaskActions } from "@/lib/task-actions";
 import { CASES, NOW, type EvalCase } from "./milo-cases";
-import type { TaskInput } from "@/types/task";
+import type { Task, TaskInput } from "@/types/task";
 
 /**
  * Configuration arrives as environment variables, never as CLI arguments.
@@ -36,6 +40,22 @@ const REPEAT = Math.max(1, Number(process.env.EVAL_REPEAT ?? 1));
  */
 const PROVIDER = process.env.EVAL_PROVIDER;
 if (PROVIDER) process.env.AI_PROVIDER_ORDER = PROVIDER;
+
+/**
+ * Which path Milo takes, so a change can be measured against the one before it.
+ *
+ *   auto    what production does: tools when a configured provider supports them,
+ *           the TASKS_ACTION text block otherwise (default)
+ *   tools   fail loudly if no provider can take tools
+ *   legacy  force the TASKS_ACTION path. This is the baseline the tools path must not
+ *           be worse than: run both and compare the pass counts.
+ *
+ *   npm run eval:milo -- --mode legacy
+ */
+const MODE = process.env.EVAL_MODE ?? "auto";
+if (!["auto", "tools", "legacy"].includes(MODE)) {
+  throw new Error(`EVAL_MODE inválido: "${MODE}". Usá auto, tools o legacy.`);
+}
 
 // The Groq plan allows 200k tokens per DAY for the whole account. A full run is
 // ~70 calls at ~1.8k tokens each, so an unthrottled loop can spend the day and
@@ -69,26 +89,94 @@ if (!hasAnyProvider) {
   /** Set once the pinned provider is out of budget; the rest of the run skips. */
   let quotaExhausted = false;
 
-  const runCase = async (testCase: EvalCase, isPro: boolean) => {
+  /** The agenda a case's own tasks imply, so `get_schedule` and `plan_week` see what the prompt shows. */
+  const scheduleFor = (tasks: Task[]): ScheduleData => ({
+    tasks,
+    sessions: [],
+    availability: DEFAULT_AVAILABILITY,
+    overrides: {},
+    inflation: 1
+  });
+
+  /** Whether this case runs through tools, exactly as the route decides it. */
+  const usesTools = (testCase: EvalCase, isPro: boolean) => {
+    const canCreateTasks = (testCase.plan ?? "pro") !== "free";
+    if (!canCreateTasks || MODE === "legacy") return false;
+    const supported = chainSupportsTools(isPro ? "pro" : "standard");
+    if (MODE === "tools" && !supported) {
+      throw new Error("EVAL_MODE=tools pero ningún proveedor configurado soporta tools con este modelo.");
+    }
+    return supported;
+  };
+
+  type Outcome = {
+    raw: string;
+    text: string;
+    tasks: TaskInput[];
+    error: string | null;
+    usage: number;
+    via: "tools" | "legacy";
+    toolsUsed: string[];
+    asked: boolean;
+    proposalDays: number;
+    weekStart: string | null;
+  };
+
+  const runCase = async (testCase: EvalCase, isPro: boolean): Promise<Outcome> => {
     const now = testCase.now ?? NOW;
     const canCreateTasks = (testCase.plan ?? "pro") !== "free";
+    const viaTools = usesTools(testCase, isPro);
+    const history = (testCase.history ?? []).map((m) => ({
+      role: m.role === "milo" ? ("assistant" as const) : ("user" as const),
+      content: m.content
+    }));
+
     // Built the same way the route builds it, split included. An eval that sent
     // a different prompt than production would be measuring the wrong thing.
     const { static: staticContext, dynamic: dynamicContext } = buildTaskPromptParts({
       tasks: testCase.tasks ?? [],
+      pendingTaskActions: testCase.pending ?? [],
       canCreateTasks,
       userMemory: testCase.userMemory ?? "",
-      now
+      now,
+      mode: canCreateTasks && !viaTools ? "legacy" : "tools"
     });
+    const promptTokens = Math.round((staticContext.length + dynamicContext.length) / 3.8);
+
+    if (viaTools) {
+      const toolCtx: ToolContext = {
+        today: now.toISOString().split("T")[0],
+        now,
+        load: async () => scheduleFor(testCase.tasks ?? [])
+      };
+      const result = await runMiloAgent({
+        message: testCase.message,
+        contextStatic: staticContext,
+        context: dynamicContext,
+        history,
+        isPro,
+        tools: toolCtx
+      });
+      return {
+        raw: result.text,
+        text: result.text,
+        tasks: result.taskActions,
+        error: null,
+        // One prompt per round, plus what the tools returned; a rough figure like the legacy one.
+        usage: promptTokens * result.rounds + Math.round(result.text.length / 3.8) + 250 * result.rounds,
+        via: "tools",
+        toolsUsed: result.toolsUsed,
+        asked: result.toolsUsed.includes("ask_user"),
+        proposalDays: result.proposal ? new Set(result.taskActions.map((t) => t.dueDate)).size : 0,
+        weekStart: result.proposal?.weekStart ?? null
+      };
+    }
 
     const { content } = await chatWithMilo({
       message: testCase.message,
       contextStatic: staticContext,
       context: dynamicContext,
-      history: (testCase.history ?? []).map((m) => ({
-        role: m.role === "milo" ? ("assistant" as const) : ("user" as const),
-        content: m.content
-      })),
+      history,
       isPro
     });
 
@@ -98,7 +186,12 @@ if (!hasAnyProvider) {
       text: parsed.text,
       tasks: parsed.taskActions,
       error: parsed.error,
-      usage: Math.round((staticContext.length + dynamicContext.length) / 3.8) + Math.round(content.length / 3.8) + 250
+      usage: promptTokens + Math.round(content.length / 3.8) + 250,
+      via: "legacy",
+      toolsUsed: [],
+      asked: false,
+      proposalDays: 0,
+      weekStart: null
     };
   };
 
@@ -142,10 +235,7 @@ if (!hasAnyProvider) {
     }
   ];
 
-  const check = (
-    testCase: EvalCase,
-    out: { text: string; tasks: TaskInput[]; error: string | null }
-  ) => {
+  const check = (testCase: EvalCase, out: Outcome) => {
     const e = testCase.expectation;
     const titles = out.tasks.map((t) => t.title.toLowerCase());
     const dates = out.tasks.map((t) => t.dueDate);
@@ -160,6 +250,44 @@ if (!hasAnyProvider) {
       const problem = global.test(out.text);
       if (problem) {
         fail(`[${global.name}] ${problem}. reply: ${JSON.stringify(out.text.slice(0, 220))}`);
+      }
+    }
+    if (out.text.includes("TASKS_ACTION")) fail("the machine block leaked into the visible reply");
+
+    // ---- Tools path only: which tool, and whether it asked instead of guessing. ----
+    if (out.via === "tools") {
+      if (e.askUser) {
+        if (!out.asked) fail(`expected ask_user (a needed detail is missing), got tools=[${out.toolsUsed.join(", ")}] reply: ${JSON.stringify(out.text.slice(0, 160))}`);
+        if (out.tasks.length > 0) fail(`asked a question but also proposed ${out.tasks.length} item(s)`);
+      }
+      if (e.tool && !out.toolsUsed.includes(e.tool)) {
+        fail(`expected tool ${e.tool}, got tools=[${out.toolsUsed.join(", ")}]`);
+      }
+      if (e.distinctDays !== undefined && out.proposalDays < e.distinctDays) {
+        fail(`expected the week spread over at least ${e.distinctDays} days, got ${out.proposalDays}`);
+      }
+      if (e.weekStart && out.weekStart !== e.weekStart) {
+        fail(`expected the plan to start ${e.weekStart}, got ${out.weekStart}`);
+      }
+    }
+
+    // ---- Both paths: nothing forgotten, fixed items on their date, the reply names what it should. ----
+    if (e.minTasks !== undefined && out.tasks.length < e.minTasks) {
+      fail(`expected at least ${e.minTasks} item(s) but got ${out.tasks.length}: [${titles.join(" | ")}] — something the user said was left out`);
+    }
+    for (const [needle, date] of Object.entries(e.titleOn ?? {})) {
+      const hit = out.tasks.find((t) => t.title.toLowerCase().includes(needle.toLowerCase()));
+      if (!hit) fail(`expected an item containing "${needle}" on ${date}, got [${titles.join(" | ")}]`);
+      else if (hit.dueDate !== date) fail(`expected "${hit.title}" on ${date}, got ${hit.dueDate}`);
+    }
+    for (const [needle, date] of Object.entries(e.titleOnOrBefore ?? {})) {
+      const hit = out.tasks.find((t) => t.title.toLowerCase().includes(needle.toLowerCase()));
+      if (!hit) fail(`expected an item containing "${needle}" on or before ${date}, got [${titles.join(" | ")}]`);
+      else if (hit.dueDate > date) fail(`expected "${hit.title}" on or before ${date}, got ${hit.dueDate}`);
+    }
+    for (const needle of e.mentions ?? []) {
+      if (!out.text.toLowerCase().includes(needle.toLowerCase())) {
+        fail(`expected the reply to mention "${needle}". reply: ${JSON.stringify(out.text.slice(0, 220))}`);
       }
     }
 
@@ -278,7 +406,13 @@ if (!hasAnyProvider) {
             );
           }
 
-          let out: Awaited<ReturnType<typeof runCase>>;
+          // ask_user and friends do not exist on the text path: nothing to measure there.
+          if (testCase.toolsOnly && !usesTools(testCase, isPro)) {
+            ctx.skip();
+            return;
+          }
+
+          let out: Outcome;
           try {
             out = await runCase(testCase, isPro);
           } catch (error) {
@@ -302,6 +436,8 @@ if (!hasAnyProvider) {
             case: testCase.name,
             model: modelLabel(isPro),
             message: testCase.message,
+            via: out.via,
+            toolsUsed: out.toolsUsed,
             raw: out.raw,
             visible: out.text,
             tasks: out.tasks,
@@ -317,7 +453,7 @@ if (!hasAnyProvider) {
             console.error(`\n--- ${label} ---`);
             console.error(`user:  ${testCase.message}`);
             console.error(`milo:  ${out.raw}`);
-            console.error(`parsed: ${out.tasks.length} task(s), error=${out.error ?? "none"}`);
+            console.error(`parsed: ${out.tasks.length} task(s), via=${out.via}, tools=[${out.toolsUsed.join(", ")}], error=${out.error ?? "none"}`);
             throw err;
           }
         });

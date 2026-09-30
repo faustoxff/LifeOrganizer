@@ -8,11 +8,12 @@ incomodidad.
 ## Correr
 
 ```bash
-npm run eval:milo                          # 36 casos × 2 modelos
+npm run eval:milo                          # 52 casos × 2 modelos
 npm run eval:milo -- --model default       # solo qwen (la mitad del costo)
 npm run eval:milo -- --filter recurrencia  # un subconjunto
 npm run eval:milo -- --repeat 5            # buscar casos intermitentes
 npm run eval:milo -- --provider ollama     # medir el provider de pago
+npm run eval:milo -- --mode legacy         # el camino viejo (bloque TASKS_ACTION), como línea base
 npm run eval:milo -- --transcript /tmp/milo
 ```
 
@@ -35,8 +36,32 @@ CLI a `EVAL_*` y ahí está la única fuente de verdad.
 | `no-crea` | conceptos, charla, opiniones, alabanzas, "ya lo hice", desahogo |
 | `free` | el plan Free no crea tareas y sí orienta al upgrade |
 | `robustez` | mayúsculas, sin acentos, sin espacios, typos, emoji, mensaje largo |
+| `semana` | "organizame la semana" con 5-8 cosas, recurrentes, un turno con hora, la semana que viene |
+| `varias` | varias cosas en un mensaje: ninguna se pierde, cada una en su día |
+| `ask_user` | falta un dato necesario → pregunta; si el resto está claro, propone sin preguntar |
+| `agenda` | "¿qué tengo el jueves?" contesta con lo que hay, sin proponer nada |
+| `cambio` | mover o sacar un ítem de una propuesta pendiente |
 | `comfort` | largo de la respuesta, planes gigantes |
 | `regresion` | los bugs que este harness encontró, para que no vuelvan |
+
+### Dos caminos, una línea base
+
+Desde la etapa 4 Milo llama tools (`create_items`, `plan_week`, `get_schedule`,
+`ask_user`) y el harness corre el mismo camino que la ruta: tools cuando un proveedor
+configurado las soporta, el bloque `TASKS_ACTION` si no. Los casos nuevos con
+`toolsOnly` (los de `ask_user` y `semana`) se saltean en el camino de texto. Los demás
+corren en los dos, y **para saber si tools empeoró algo hay que correr las dos
+versiones y comparar**:
+
+```bash
+npm run eval:milo -- --mode legacy --model default   # línea base
+npm run eval:milo -- --mode tools --model default    # el camino nuevo
+```
+
+`--mode tools` falla fuerte si ningún proveedor soporta tools, en vez de medir el otro
+camino sin avisar. Las expectativas nuevas (`tool`, `askUser`, `distinctDays`,
+`weekStart`) solo se miran con tools; `minTasks`, `titleOn`, `titleOnOrBefore` y
+`mentions` valen en los dos.
 
 Además hay tres chequeos de incomodidad que se aplican a **todos** los casos:
 
@@ -116,8 +141,9 @@ reusan los bytes del principio, y un detalle por turno adelante de las reglas
 las invalidaría todas. `tests/milo-prompt.test.ts` lo fija, incluida la
 comprobación de que la mitad estática no cambia con las tareas ni con la memoria.
 
-Una concesión: la mitad estática **sí** lleva una fecha, en el ejemplo de formato
-del bloque `TASKS_ACTION`. Podría ser un `YYYY-MM-DD` literal, pero eso invita al
+Una concesión, **solo en el camino de texto**: la mitad estática lleva una fecha, en el
+ejemplo de formato del bloque `TASKS_ACTION`. (El prompt de tools no lleva ninguna: es
+idéntico todos los días.) Podría ser un `YYYY-MM-DD` literal, pero eso invita al
 modelo a emitirliteral como `dueDate` y crear tareas basura. Cuesta un
 re-calentamiento de caché por día, que a $0.136/M de diferencia son centavos.
 

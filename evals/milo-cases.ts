@@ -1,4 +1,4 @@
-import type { Task } from "@/types/task";
+import type { Task, TaskInput } from "@/types/task";
 
 /**
  * Evals for Milo's chat behaviour, run against the real Groq models.
@@ -51,6 +51,10 @@ export const SAT_PLUS_2W = nextWeekday(NOW, 6, 2);
 export const SAT_PLUS_3W = nextWeekday(NOW, 6, 3);
 export const FRI = nextWeekday(NOW, 5);
 export const THU = nextWeekday(NOW, 4);
+export const TUE = nextWeekday(NOW, 2);
+export const SUN = nextWeekday(NOW, 0);
+/** El lunes de la semana que viene: el weekStart de "la semana que viene". */
+export const NEXT_MON = iso(addDays(NOW, 7));
 
 const sampleTasks = (): Task[] => [
   {
@@ -109,6 +113,26 @@ export type Expectation = {
   maxChars?: number;
   /** Only for plan-free cases: the reply must point at the upgrade path. */
   mentionsUpgrade?: boolean;
+
+  // ---- Solo camino de tools. En el modo legacy estos chequeos se saltean. ----
+  /** Esta tool tiene que haberse usado (y se ejecutó sin error). */
+  tool?: "create_items" | "plan_week" | "get_schedule" | "ask_user";
+  /** Milo tiene que preguntar con ask_user y no proponer nada: falta un dato necesario. */
+  askUser?: boolean;
+  /** La propuesta semanal tiene que repartirse en al menos esta cantidad de días distintos. */
+  distinctDays?: number;
+  /** La propuesta semanal tiene que arrancar este día (weekStart). */
+  weekStart?: string;
+
+  // ---- Valen en los dos modos. ----
+  /** Al menos esta cantidad de ítems propuestos. Es lo que atrapa "se olvidó de uno". */
+  minTasks?: number;
+  /** Ese ítem (substring del título) tiene que estar exactamente en esa fecha. */
+  titleOn?: Record<string, string>;
+  /** Ese ítem (substring del título) tiene que estar en esa fecha o antes. */
+  titleOnOrBefore?: Record<string, string>;
+  /** La respuesta visible tiene que nombrar todo esto (substring, sin importar mayúsculas). */
+  mentions?: string[];
 };
 
 export type EvalCase = {
@@ -121,6 +145,10 @@ export type EvalCase = {
   userMemory?: string;
   /** Seeded in the prompt so relative dates are deterministic. */
   now?: Date;
+  /** Ítems de una propuesta pendiente de confirmar, como los manda el cliente. */
+  pending?: TaskInput[];
+  /** El caso solo tiene sentido con tools (por ejemplo, ask_user). En modo legacy se saltea. */
+  toolsOnly?: boolean;
   /** Cases here are inherently fuzzy; excluded from the strict pass rate. */
   soft?: boolean;
   note?: string;
@@ -279,6 +307,165 @@ export const CASES: EvalCase[] = [
     name: "no-crea: desahogo sin tarea",
     message: "estoy re estresado con la universidad, no me rinde el tiempo",
     expectation: { tasks: "none" }
+  },
+
+  // ------------------------------------------------------------------ organizar la semana
+  // `plan_week`: el modelo junta lo que el usuario nombró y el servidor lo reparte. Lo que se
+  // mide acá es lo que decide el modelo: que use la tool, que no se olvide de ninguna cosa,
+  // que ponga fija solo la que tiene día, y que la respuesta no repita la tarjeta.
+  {
+    name: "semana: organizame la semana con seis cosas",
+    message:
+      "organizame la semana: tengo que entregar el informe de física el jueves, estudiar para el parcial de cálculo del viernes, ir al gimnasio, llamar al banco, comprar los regalos y limpiar el departamento",
+    expectation: {
+      tasks: "some",
+      tool: "plan_week",
+      minTasks: 6,
+      titles: ["informe", "banco", "regalos"],
+      titleOnOrBefore: { informe: THU },
+      distinctDays: 3,
+      maxChars: 700
+    },
+    toolsOnly: true
+  },
+  {
+    name: "semana: ocho cosas con una recurrente y un turno con hora",
+    message:
+      "armame la semana: gimnasio lunes, miércoles y viernes, el informe para el jueves, llamar al médico, comprar comida, estudiar inglés, pagar la luz, dentista el martes a las 10 y limpiar la casa",
+    expectation: {
+      tasks: "some",
+      tool: "plan_week",
+      minTasks: 8,
+      // La recurrencia es UN ítem, no tres: el total no puede pasar de lo que se nombró.
+      maxTasks: 8,
+      repeat: { freq: "weekly", weekdays: [1, 3, 5] },
+      titles: ["gimnasio", "informe", "dentista"],
+      titleOn: { dentista: TUE },
+      titleOnOrBefore: { informe: THU },
+      maxChars: 700
+    },
+    toolsOnly: true
+  },
+  {
+    name: "semana: la semana que viene y todo recurrente",
+    message:
+      "organizame la semana que viene: gimnasio martes y jueves, inglés lunes y miércoles a la noche y repasar apuntes todos los días",
+    expectation: {
+      tasks: "some",
+      tool: "plan_week",
+      weekStart: NEXT_MON,
+      minTasks: 3,
+      maxTasks: 3,
+      repeat: { freq: "weekly", weekdays: [2, 4] },
+      maxChars: 700
+    },
+    toolsOnly: true
+  },
+  {
+    name: "semana: cinco cosas del día a día, sin fechas",
+    message: "ayudame a repartir esta semana: hacer la compra, ir al correo, arreglar la bici, llamar al plomero y devolver el libro a la biblioteca",
+    expectation: { tasks: "some", tool: "plan_week", minTasks: 5, distinctDays: 3, maxChars: 700 },
+    toolsOnly: true
+  },
+
+  // ------------------------------------------------------------------ varias cosas en un mensaje
+  {
+    name: "varias: cinco cosas con día distinto, todas en una llamada",
+    message:
+      "mañana tengo que entregar el TP, el miércoles rindo álgebra, el jueves llamar al médico, el viernes pagar el alquiler y el sábado ir a lo de mi tía",
+    expectation: {
+      tasks: "some",
+      tool: "create_items",
+      minTasks: 5,
+      maxTasks: 5,
+      dates: [TOMORROW, WED, THU, FRI, SAT],
+      titles: ["TP", "álgebra", "médico", "alquiler", "tía"]
+    }
+  },
+  {
+    name: "varias: recurrente, recordatorio con hora y tarea suelta",
+    message: "gimnasio martes y jueves, mañana a las 9 pagar la luz y el viernes entrego el informe",
+    expectation: {
+      tasks: "some",
+      tool: "create_items",
+      minTasks: 3,
+      maxTasks: 3,
+      repeat: { freq: "weekly", weekdays: [2, 4] },
+      titleOn: { informe: FRI, luz: TOMORROW },
+      titles: ["gimnasio", "luz", "informe"]
+    }
+  },
+  {
+    name: "varias: ocho pendientes sueltos no se pierden ninguno",
+    message:
+      "anotame: comprar los apuntes, llamar al centro médico, renovar el carnet de la biblioteca, mandar el cv, pagar la luz, llamar a mi tía, comprar comida del perro y revisar los apuntes de cálculo",
+    expectation: { tasks: "some", tool: "create_items", minTasks: 8, maxTasks: 8 }
+  },
+
+  // ------------------------------------------------------------------ falta un dato: ask_user
+  {
+    name: "ask_user: organizame la semana sin decir qué",
+    message: "organizame la semana",
+    expectation: { tasks: "none", askUser: true, maxChars: 400 },
+    toolsOnly: true
+  },
+  {
+    name: "ask_user: armame el plan pero no dice qué cosas",
+    message: "tengo un montón de cosas por hacer, armame un plan para estos días",
+    expectation: { tasks: "none", askUser: true, maxChars: 400 },
+    toolsOnly: true
+  },
+  {
+    name: "ask_user: no pregunta por una fecha suelta cuando el resto está claro",
+    // Contraparte del caso de arriba: acá SÍ hay qué agendar, así que preguntar "¿para qué día?"
+    // sería el error inverso (el prompt dice: proponé con un default).
+    message: "agendame llamar al banco",
+    expectation: { tasks: "some", tool: "create_items", titles: ["banco"], maxTasks: 1 }
+  },
+
+  // ------------------------------------------------------------------ consultar la agenda
+  {
+    name: "agenda: qué tengo el jueves",
+    message: "¿qué tengo el jueves?",
+    tasks: sampleTasks(),
+    // La tarea de álgebra vence el jueves. Puede contestarla de la lista o consultando get_schedule:
+    // las dos están bien. Lo que no puede es inventar cosas ni proponer nada.
+    expectation: { tasks: "none", mentions: ["álgebra"], maxChars: 500 }
+  },
+  {
+    name: "agenda: sin nada agendado lo dice",
+    message: "¿tengo algo el martes?",
+    expectation: { tasks: "none", maxChars: 400 }
+  },
+
+  // ------------------------------------------------------------------ cambios sobre una propuesta
+  {
+    name: "cambio: mover un ítem de la propuesta pendiente",
+    message: "pasá el informe al miércoles",
+    pending: [
+      { title: "Informe", category: "general", description: "", priority: "medium", estimateMin: 90, dueDate: TUE, kind: "task" },
+      { title: "Comprar regalos", category: "general", description: "", priority: "medium", estimateMin: 45, dueDate: THU, kind: "task" },
+      { title: "Llamar al banco", category: "general", description: "", priority: "medium", estimateMin: 10, dueDate: FRI, kind: "reminder" }
+    ],
+    history: [
+      { role: "user", content: "organizame la semana: informe, regalos y llamar al banco" },
+      { role: "milo", content: "Te propongo el informe el martes, los regalos el jueves y el banco el viernes." }
+    ],
+    // Vuelve a llamar la tool con la lista COMPLETA: el informe el miércoles y los otros dos siguen ahí.
+    expectation: { tasks: "some", minTasks: 3, maxTasks: 3, titleOn: { informe: WED }, titles: ["regalos", "banco"] }
+  },
+  {
+    name: "cambio: sacar un ítem de la propuesta pendiente",
+    message: "el gimnasio sacalo, no voy a ir",
+    pending: [
+      { title: "Gimnasio", category: "general", description: "", priority: "medium", estimateMin: 60, dueDate: TUE, kind: "task" },
+      { title: "Informe", category: "general", description: "", priority: "medium", estimateMin: 90, dueDate: WED, kind: "task" }
+    ],
+    history: [
+      { role: "user", content: "organizame la semana: gimnasio e informe" },
+      { role: "milo", content: "Gimnasio el martes e informe el miércoles." }
+    ],
+    expectation: { tasks: "some", minTasks: 1, maxTasks: 1, titles: ["informe"], titleOn: { informe: WED } }
   },
 
   // ---------------------------------------------------------------- paywall/free
