@@ -16,6 +16,8 @@ import { formatDueDate } from "@/lib/task-date";
 import { getTaskPriorityLabel } from "@/lib/task-labels";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { cn } from "@/lib/utils";
+import { WeekProposalCard } from "@/components/week-proposal-card";
+import type { WeekProposal } from "@/types/milo";
 import { Task, TaskInput } from "@/types/task";
 import { useUser } from "@clerk/nextjs";
 
@@ -57,6 +59,8 @@ type Message = {
   role: "user" | "milo";
   content: string;
   taskActions?: TaskInput[];
+  /** Solo cuando Milo armó la semana: se muestra como tarjeta por día en vez de lista. */
+  proposal?: WeekProposal;
   taskCreated?: boolean;
 };
 
@@ -134,13 +138,14 @@ export function MiloChat({
   const tasksLoadedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Tarea pendiente de confirmación (la última sin confirmar ni descartar)
-  const pendingTaskAction = useMemo(() => {
+  // Ítems pendientes de confirmación (los de la última propuesta sin confirmar ni descartar).
+  // Van al servidor completos para que Milo pueda cambiarlos si el usuario lo pide.
+  const pendingTaskActions = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.taskActions && m.taskActions.length > 0 && !m.taskCreated) return m.taskActions[0];
+      if (m.taskActions && m.taskActions.length > 0 && !m.taskCreated) return m.taskActions;
     }
-    return null;
+    return [];
   }, [messages]);
 
   const overloadedTasks = useMemo(() => {
@@ -210,21 +215,30 @@ export function MiloChat({
       const response = await fetch("/api/milo/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, tasks, history, pendingTaskAction })
+        body: JSON.stringify({ message: text, tasks, history, pendingTaskActions })
       });
 
       const data = (await response.json()) as {
         response?: string;
         error?: string;
         taskActions?: TaskInput[];
+        proposal?: WeekProposal | null;
       };
 
+      const hasActions = Boolean(data.taskActions && data.taskActions.length > 0);
       const newMessage: Message = {
         role: "milo",
         content: data.response ?? data.error ?? copy.milo.noConnection,
-        ...(data.taskActions && data.taskActions.length > 0 ? { taskActions: data.taskActions } : {})
+        ...(hasActions ? { taskActions: data.taskActions } : {}),
+        ...(hasActions && data.proposal ? { proposal: data.proposal } : {})
       };
-      setMessages((prev) => [...prev, newMessage]);
+      // Una propuesta nueva reemplaza a la anterior sin confirmar (por ejemplo, cuando el
+      // usuario pidió un cambio): dos tarjetas con botones apuntando a lo mismo, una de
+      // ellas vieja, es la forma más fácil de crear todo dos veces.
+      setMessages((prev) => [
+        ...(hasActions ? prev.map((m) => (m.taskActions ? { ...m, taskActions: undefined, proposal: undefined } : m)) : prev),
+        newMessage
+      ]);
     } catch {
       setMessages((prev) => [...prev, { role: "milo", content: copy.milo.noConnection }]);
     } finally {
@@ -245,10 +259,18 @@ export function MiloChat({
         results.push(await onCreateTask(action));
       }
       const created = results.length > 0 && results.every(Boolean);
+      // Lo que sí se creó no vuelve a ofrecerse: reintentar con todo el lote duplicaría
+      // las que ya existen. La tarjeta semanal se reemplaza por la lista de lo que falta.
+      const remaining = actions.filter((_, idx) => !results[idx]);
       setMessages((prev) =>
         prev.map((m, i) =>
           i === msgIndex
-            ? { ...m, taskActions: created ? undefined : m.taskActions, taskCreated: created }
+            ? {
+                ...m,
+                taskActions: created ? undefined : remaining,
+                proposal: created || remaining.length !== actions.length ? undefined : m.proposal,
+                taskCreated: created
+              }
             : m
         )
       );
@@ -259,7 +281,7 @@ export function MiloChat({
 
   function handleDismissTask(msgIndex: number) {
     setMessages((prev) =>
-      prev.map((m, i) => (i === msgIndex ? { ...m, taskActions: undefined } : m))
+      prev.map((m, i) => (i === msgIndex ? { ...m, taskActions: undefined, proposal: undefined } : m))
     );
   }
 
@@ -341,7 +363,17 @@ export function MiloChat({
               {msg.role === "milo" ? renderMarkdown(msg.content) : msg.content}
             </div>
 
-            {msg.taskActions && msg.taskActions.length > 0 && (
+            {msg.taskActions && msg.taskActions.length > 0 && msg.proposal && (
+              <WeekProposalCard
+                proposal={msg.proposal}
+                count={msg.taskActions.length}
+                disabled={isCreatingTask}
+                onConfirm={() => void handleConfirmTask(i, msg.taskActions!)}
+                onDismiss={() => handleDismissTask(i)}
+              />
+            )}
+
+            {msg.taskActions && msg.taskActions.length > 0 && !msg.proposal && (
               <div className="mt-2 max-w-[85%] w-full rounded-xl border border-border bg-card p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground">
                   {msg.taskActions.length === 1 ? copy.milo.createTask : `${copy.milo.createTask} (${msg.taskActions.length})`}
