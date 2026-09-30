@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRecommendedTask, getTaskScore } from "@/lib/task-score";
+import { getTopScoredTask, getTaskScore } from "@/lib/task-score";
 import type { Task } from "@/types/task";
 
 function dateIn(days: number) {
@@ -42,22 +42,22 @@ describe("getTaskScore", () => {
   });
 });
 
-describe("getRecommendedTask", () => {
+describe("getTopScoredTask", () => {
   it("returns null when there is nothing pending", () => {
-    expect(getRecommendedTask([])).toBeNull();
-    expect(getRecommendedTask([task({ id: "a", done: true })])).toBeNull();
+    expect(getTopScoredTask([])).toBeNull();
+    expect(getTopScoredTask([task({ id: "a", done: true })])).toBeNull();
   });
 
   it("ignores completed tasks even when they would score highest", () => {
     const done = task({ id: "done", done: true, priority: "high", dueDate: dateIn(-3) });
     const pending = task({ id: "pending", priority: "low", dueDate: dateIn(9) });
-    expect(getRecommendedTask([done, pending])?.id).toBe("pending");
+    expect(getTopScoredTask([done, pending])?.id).toBe("pending");
   });
 
   it("picks the urgent high-priority task over a far-off one", () => {
     const urgent = task({ id: "urgent", priority: "high", dueDate: dateIn(1) });
     const later = task({ id: "later", priority: "low", dueDate: dateIn(20) });
-    expect(getRecommendedTask([later, urgent])?.id).toBe("urgent");
+    expect(getTopScoredTask([later, urgent])?.id).toBe("urgent");
   });
 
   it("is deterministic: same input, same winner regardless of order", () => {
@@ -66,8 +66,8 @@ describe("getRecommendedTask", () => {
       task({ id: "b", priority: "medium", dueDate: dateIn(1), estimateMin: 15 }),
       task({ id: "c", priority: "low", dueDate: dateIn(0), estimateMin: 45 })
     ];
-    const winner = getRecommendedTask(tasks)?.id;
-    expect(getRecommendedTask([...tasks].reverse())?.id).toBe(winner);
+    const winner = getTopScoredTask(tasks)?.id;
+    expect(getTopScoredTask([...tasks].reverse())?.id).toBe(winner);
   });
 });
 
@@ -92,31 +92,31 @@ describe("minutos", () => {
   });
 });
 
-describe("getRecommendedTask: qué compite", () => {
+describe("getTopScoredTask: qué compite", () => {
   const TODAY = "2026-09-28";
 
   it("un recordatorio no es la tarea recomendada, aunque puntúe más", () => {
     const reminder = task({ id: "rem", kind: "reminder", priority: "high", dueDate: TODAY, estimateMin: 5 });
     const normal = task({ id: "norm", priority: "low", dueDate: "2026-10-20" });
-    expect(getRecommendedTask([reminder, normal], TODAY)?.id).toBe("norm");
-    expect(getRecommendedTask([reminder], TODAY)).toBeNull();
+    expect(getTopScoredTask([reminder, normal], TODAY)?.id).toBe("norm");
+    expect(getTopScoredTask([reminder], TODAY)).toBeNull();
   });
 
   it("una ocurrencia salteada no compite", () => {
     const skipped = task({ id: "s", status: "skipped", seriesId: "g", occurrenceDate: "2026-09-27", dueDate: "2026-09-27", priority: "high" });
     const normal = task({ id: "norm", priority: "low", dueDate: "2026-10-20" });
-    expect(getRecommendedTask([skipped, normal], TODAY)?.id).toBe("norm");
+    expect(getTopScoredTask([skipped, normal], TODAY)?.id).toBe("norm");
   });
 
   it("una ocurrencia futura de una serie no compite hoy; la de hoy sí", () => {
     const future = task({ id: "f", seriesId: "g", occurrenceDate: "2026-09-30", dueDate: "2026-09-30", priority: "high" });
     const today = task({ id: "t", seriesId: "g", occurrenceDate: TODAY, dueDate: TODAY, priority: "low" });
-    expect(getRecommendedTask([future, today], TODAY)?.id).toBe("t");
-    expect(getRecommendedTask([future], TODAY)).toBeNull();
+    expect(getTopScoredTask([future, today], TODAY)?.id).toBe("t");
+    expect(getTopScoredTask([future], TODAY)).toBeNull();
   });
 
   it("una tarea suelta con fecha futura sigue compitiendo, como siempre", () => {
     const later = task({ id: "later", dueDate: "2026-10-30" });
-    expect(getRecommendedTask([later], TODAY)?.id).toBe("later");
+    expect(getTopScoredTask([later], TODAY)?.id).toBe("later");
   });
 });

@@ -166,7 +166,7 @@ export type FreeWindow = {
   minutesToBlock: number | null;
   /** Minutos hasta medianoche, hora del usuario. */
   minutesToEndOfDay: number;
-  limit: "block" | "in_block" | "capacity" | "end_of_day";
+  limit: "block" | "in_block" | "capacity" | "end_of_day" | "manual";
 };
 
 export type FreeWindowInput = {
@@ -220,6 +220,11 @@ export function getFreeWindow({ now, blocks, timeZone, dayCapacityMin }: FreeWin
     minutesToEndOfDay,
     limit: capped ? "capacity" : "end_of_day"
   };
+}
+
+/** Contra qué bloque se hizo una corrección manual: si cambia, la corrección ya no vale. */
+export function blockKeyOf(window: Pick<FreeWindow, "currentBlock" | "nextBlock">): string | null {
+  return window.currentBlock?.id ?? window.nextBlock?.id ?? null;
 }
 
 // ---------------------------------------------------------------------------

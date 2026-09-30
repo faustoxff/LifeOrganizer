@@ -5,7 +5,7 @@ import { isRecommendable } from "@/lib/task-views";
 
 type ScoredTask = Pick<Task, "priority" | "estimateMin" | "dueDate">;
 
-const priorityPoints = {
+export const priorityPoints = {
   low: 2,
   medium: 5,
   high: 8
@@ -25,7 +25,11 @@ export function getTaskScore(task: ScoredTask, today?: string) {
   return getTaskScoreWithContext(task, { hasCriticalTasks: false, today });
 }
 
-export function getRecommendedTask(tasks: Task[], today?: string) {
+/**
+ * La tarea de mayor puntaje, sin mirar el reloj. La recomendación "para ahora" (que sí
+ * considera el tiempo libre y los compromisos) es `getRecommendedTask` en lib/recommendation.ts.
+ */
+export function getTopScoredTask(tasks: Task[], today?: string) {
   const pendingTasks = tasks.filter((task) => isRecommendable(task, today));
 
   if (pendingTasks.length === 0) {
@@ -66,7 +70,7 @@ export function getRecommendedTask(tasks: Task[], today?: string) {
   return sortedTasks[0];
 }
 
-function getUrgencyPoints(daysUntilDueDate: number) {
+export function getUrgencyPoints(daysUntilDueDate: number) {
   if (daysUntilDueDate <= 0) {
     return 18;
   }
@@ -115,7 +119,7 @@ function getDurationPoints(
   return score;
 }
 
-function getTaskScoreWithContext(
+export function getTaskScoreWithContext(
   task: ScoredTask,
   context: { hasCriticalTasks: boolean; today?: string }
 ) {
@@ -129,7 +133,7 @@ function getTaskScoreWithContext(
   return score;
 }
 
-function isCriticalTask(task: ScoredTask, today?: string) {
+export function isCriticalTask(task: ScoredTask, today?: string) {
   const daysUntilDueDate = getDaysUntilDueDate(task.dueDate, today);
 
   return (
