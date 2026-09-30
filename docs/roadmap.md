@@ -567,3 +567,59 @@ mano: nada se inventa.
   push del servidor. El permiso se pide aparte del aviso diario.
 - **Orden de despliegue**: `loadTasks` ahora lee `tasks.checklist`, así que la migración tiene que
   aplicarse **antes** de desplegar; con el código nuevo y el esquema viejo, cargar las tareas falla.
+
+## Etapa 6: Spark aprende del usuario y se adapta al momento
+
+Hasta acá Spark usaba un factor de inflación global y descartaba lo que pasaba con cada tarea. Esta
+etapa guarda lo que pasa (cuánto tardó, a qué hora se terminó, cuántas veces se postergó) y lo usa.
+**Todo es estadística sobre los datos del propio usuario: no hay IA generativa en el cálculo.** La IA
+(Milo) solo redacta números que salen de `lib/user-patterns.ts`.
+
+### 1. Guardar lo que pasa (migración aditiva)
+
+- `tasks`: `actual_min INTEGER NULL`, `completed_hour SMALLINT NULL` (0-23, hora **local del
+  usuario** al completar), `postponed_count INTEGER NOT NULL DEFAULT 0`, `last_postponed_at
+  TIMESTAMPTZ NULL`.
+- `subtasks`: `completed_hour` y `postponed_count`.
+- Completar desde el modo foco guarda `actual_min` con los minutos reales del timer, **acumulando** si se
+  hizo en varias sesiones (como `subtasks.actual_min`). Completar sin modo foco guarda solo
+  `completed_hour` y deja `actual_min` en NULL: no se inventa.
+- `postponed_count` sube cada vez que una tarea pasa a un **día posterior**. La regla es una sola
+  (`isPostponement`, `lib/postponement.ts`) y la usan la edición a mano, Milo (que edita por la misma ruta)
+  y `moveTaskDueDate`, la función que va a usar la replanificación del próximo prompt. Adelantar una tarea
+  no es postergarla.
+
+### 2. Modo foco solo donde tiene sentido
+
+Solo para `kind = 'task'` con más de 15 min, y para las sesiones de subtareas de proyecto. Nunca para
+`reminder` ni para tareas de 15 min o menos: esas se completan con un tilde (`lib/focus-eligibility.ts`).
+
+### 3. Aprendizaje (`lib/user-patterns.ts`, funciones puras)
+
+- `learnInflationByCategory(history)`: mediana de real/estimado por categoría, mismo criterio que
+  `learnInflation` (mínimo 5 muestras, acotado 1.0-2.0). Categoría con pocas muestras → factor global;
+  sin global → default (1.3). Cada resultado dice de dónde salió (`category` / `global` / `default`).
+- `productiveHours(history)`: tareas completadas por franja (mañana 6-12, tarde 12-19, noche 19-24,
+  madrugada 0-6). Solo "aprendida" con **15** completadas o más; con un empate en el primer puesto no
+  se nombra una mejor franja.
+- `chronicPostponers(history)`: una tarea que se postergó 3+ veces; una categoría con 3+ postergaciones
+  repartidas en al menos 2 tareas (una sola tarea terca ya figura como tarea).
+- El historial es de los **últimos 90 días** y se arma por usuario en el servidor
+  (`lib/user-history.ts`), con un loader memoizado por request. Toda consulta filtra por `user_id`.
+
+### 4. Usarlo
+
+- El scheduler de proyectos y `plan_week` usan el factor de la **categoría** de cada tarea/proyecto.
+- El formulario de tarea muestra la estimación ajustada: "Estimaste 30 min; en Estudio solés tardar ~45".
+- Tool nueva de Milo, `get_my_patterns` (solo lectura): devuelve los patrones aprendidos para contestar
+  "¿cuánto tardo en estudiar?" o "¿cuándo rindo más?".
+- Pantalla de stats: sección "Cómo trabajás" con los mismos datos, o cuántas tareas faltan para
+  empezar a aprender.
+
+### Decisiones de la etapa 6
+
+- El factor global ahora se calcula sobre tareas y subtareas con tiempo medido (antes, solo subtareas).
+- Una tarea completada con tilde no aporta al factor (no hay tiempo real), pero sí a "cuándo rendís".
+- Solo cuentan `task` y subtareas para las franjas; un recordatorio tildado no es trabajo.
+- **Orden de despliegue**: aplicar la migración **antes** de desplegar; completar una tarea ahora escribe
+  las columnas nuevas.
