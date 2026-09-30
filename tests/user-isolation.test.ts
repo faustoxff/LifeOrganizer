@@ -195,7 +195,8 @@ describe("patrones del usuario (etapa 6)", () => {
   it("las escrituras nuevas de tareas y subtareas comparan user_id", () => {
     for (const [path, fn] of [
       ["lib/storage.ts", "addTaskProgress"],
-      ["lib/storage.ts", "moveTaskDueDate"],
+      ["lib/storage.ts", "moveTaskPlannedDate"],
+      ["lib/storage.ts", "setTaskPinned"],
       ["lib/storage.ts", "setTaskDone"]
     ] as const) {
       const source = read(path);

@@ -30,7 +30,9 @@ export function computeFixedLoad(tasks: readonly Task[], today: string): Record<
   const load: Record<string, number> = {};
   for (const task of tasks) {
     if (task.kind === "project" || task.done || task.status === "skipped") continue;
-    const date = task.dueDate < today ? today : task.dueDate;
+    // Cuenta en el día en que hay que hacerla (planificado), no en el que vence.
+    const planned = task.plannedOn ?? task.dueDate;
+    const date = planned < today ? today : planned;
     load[date] = (load[date] ?? 0) + task.estimateMin;
   }
   return load;

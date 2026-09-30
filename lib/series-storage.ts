@@ -91,7 +91,8 @@ export async function loadSeriesOccurrences(userId: string, seriesId: string): P
   const rows = await sql`
     SELECT id, user_id, title, category, description, priority, estimate_min, due_date,
            done, completed_at, steps, kind, remind_at, series_id,
-           occurrence_date::text AS occurrence_date, status, daily_cap_min
+           occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+           planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
     FROM tasks
     WHERE user_id = ${userId} AND series_id = ${seriesId}
     ORDER BY occurrence_date ASC

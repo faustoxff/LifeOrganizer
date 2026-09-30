@@ -31,13 +31,18 @@ type TaskRow = {
   status: TaskStatus;
   daily_cap_min: number | null;
   checklist?: unknown;
+  planned_on?: string | null;
+  pinned?: boolean;
+  postponed_count?: number;
+  replan_conflict?: boolean;
 };
 
 export async function loadTasks(userId: string): Promise<Task[]> {
   const rows = await sql`
     SELECT id, user_id, title, category, description, priority, estimate_min, due_date,
            done, completed_at, steps, kind, remind_at, series_id,
-           occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+           occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+           planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
     FROM tasks
     WHERE user_id = ${userId}
     ORDER BY created_at DESC
@@ -56,7 +61,8 @@ export async function createTask(task: Task, userId: string): Promise<Task> {
             ${task.kind === "project" ? (task.dailyCapMin ?? null) : null})
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+           planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
   `;
   const created = normalizeTask(rows[0]);
   if (!created) throw new Error("Failed to create task.");
@@ -82,6 +88,9 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
           + CASE WHEN ${task.dueDate} > due_date AND ${task.dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN 1 ELSE 0 END,
         last_postponed_at = CASE WHEN ${task.dueDate} > due_date AND ${task.dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
                                  THEN NOW() ELSE last_postponed_at END,
+        -- editar la fecha a mano es una decisión del usuario: la replanificación deja de tener la última palabra
+        planned_on = CASE WHEN ${task.dueDate} <> due_date THEN NULL ELSE planned_on END,
+        replan_conflict = CASE WHEN ${task.dueDate} <> due_date THEN FALSE ELSE replan_conflict END,
         done = ${task.done}, steps = ${JSON.stringify(task.steps ?? [])}::jsonb,
         kind = ${task.kind}, remind_at = ${task.time ?? null},
         daily_cap_min = ${task.kind === "project" ? (task.dailyCapMin ?? null) : null},
@@ -92,7 +101,8 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
       AND (series_id IS NULL OR ${task.kind} <> 'project')
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+           planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
   `;
   return normalizeTask(rows[0]);
 }
@@ -128,7 +138,8 @@ export async function setTaskDone(
     WHERE id = ${taskId} AND user_id = ${userId}
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+           planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
   `;
   const updated = normalizeTask(rows[0]);
   if (!updated) throw new Error("Failed to toggle task.");
@@ -150,24 +161,38 @@ export async function addTaskProgress(taskId: string, minutes: number, userId: s
 }
 
 /**
- * Mueve una tarea a otra fecha y cuenta la postergación si es a un día posterior
- * (`isPostponement`). Es la función para mover fechas SIN editar el resto de la tarea:
- * la replanificación la va a usar. Editar desde el formulario aplica la misma regla en
- * `updateTask`. Devuelve null si la tarea no existe o no es del usuario.
+ * Mueve la fecha PLANIFICADA de una tarea (`planned_on`); la fecha límite (`due_date`) no se toca. Cuenta la
+ * postergación si el día nuevo es posterior al que tenía planificado (`isPostponement`). Es la función que usa
+ * la replanificación para mover algo sin editarlo. Devuelve null si la tarea no existe o no es del usuario.
  */
-export async function moveTaskDueDate(taskId: string, dueDate: string, userId: string): Promise<Task | null> {
+export async function moveTaskPlannedDate(taskId: string, plannedOn: string, userId: string): Promise<Task | null> {
   const rows = await sql`
     UPDATE tasks
     SET postponed_count = postponed_count
-          + CASE WHEN ${dueDate} > due_date AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN 1 ELSE 0 END,
-        last_postponed_at = CASE WHEN ${dueDate} > due_date AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
+          + CASE WHEN ${plannedOn} > COALESCE(planned_on::text, due_date) THEN 1 ELSE 0 END,
+        last_postponed_at = CASE WHEN ${plannedOn} > COALESCE(planned_on::text, due_date)
                                  THEN NOW() ELSE last_postponed_at END,
-        due_date = ${dueDate}
+        planned_on = ${plannedOn}::date,
+        replan_conflict = FALSE
     WHERE id = ${taskId} AND user_id = ${userId}
-      AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
+      AND ${plannedOn} ~ '^\\d{4}-\\d{2}-\\d{2}$'
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+              planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
+  `;
+  return normalizeTask(rows[0]);
+}
+
+/** Fija o suelta una tarea. Una fijada no se mueve nunca en la replanificación. */
+export async function setTaskPinned(taskId: string, pinned: boolean, userId: string): Promise<Task | null> {
+  const rows = await sql`
+    UPDATE tasks SET pinned = ${pinned}
+    WHERE id = ${taskId} AND user_id = ${userId}
+    RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
+              done, completed_at, steps, kind, remind_at, series_id,
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist,
+              planned_on::text AS planned_on, pinned, postponed_count, replan_conflict
   `;
   return normalizeTask(rows[0]);
 }
@@ -231,6 +256,10 @@ export function normalizeTask(row: unknown): Task | null {
       ...(r.series_id ? { seriesId: r.series_id } : {}),
       ...(r.occurrence_date ? { occurrenceDate: r.occurrence_date } : {}),
       ...(typeof r.daily_cap_min === "number" && r.kind === "project" ? { dailyCapMin: r.daily_cap_min } : {}),
+      ...(typeof r.planned_on === "string" && r.planned_on ? { plannedOn: r.planned_on } : {}),
+      ...(r.pinned === true ? { pinned: true } : {}),
+      ...(typeof r.postponed_count === "number" && r.postponed_count > 0 ? { postponedCount: r.postponed_count } : {}),
+      ...(r.replan_conflict === true ? { conflict: true } : {}),
       ...(readTaskChecklist(r.checklist) ? { checklist: readTaskChecklist(r.checklist)! } : {}),
       steps: normalizeSteps(r.steps)
     };

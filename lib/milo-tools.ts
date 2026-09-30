@@ -209,7 +209,7 @@ export type ScheduleTask = Pick<
   Task,
   "title" | "kind" | "priority" | "estimateMin" | "dueDate" | "time" | "done" | "status" | "seriesId"
 > &
-  Partial<Pick<Task, "id" | "category" | "steps" | "occurrenceDate">>;
+  Partial<Pick<Task, "id" | "category" | "steps" | "occurrenceDate" | "plannedOn" | "pinned">>;
 
 export type ScheduleSession = {
   date: string;
@@ -369,7 +369,7 @@ export function existingEntries(data: ScheduleData): ExistingEntry[] {
   const entries: ExistingEntry[] = [];
   for (const task of data.tasks) {
     if (task.kind === "project" || !isPending(task)) continue;
-    entries.push({ date: task.dueDate, title: task.title, minutes: task.estimateMin, priority: task.priority });
+    entries.push({ date: task.plannedOn ?? task.dueDate, title: task.title, minutes: task.estimateMin, priority: task.priority });
   }
   for (const session of data.sessions) {
     entries.push({ date: session.date, title: session.title, minutes: session.minutes });

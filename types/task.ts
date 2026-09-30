@@ -61,6 +61,17 @@ export interface Task extends Omit<TaskInput, "repeat"> {
   steps?: TaskStep[];
   /** La checklist de "no te olvides" de esta tarea/ocurrencia, si ya se armó. */
   checklist?: TaskChecklist;
+  /**
+   * Cuándo hacerla, si la replanificación la movió. `dueDate` es siempre la fecha límite y no se toca.
+   * Sin valor = el día que vence. Usá `plannedDateOf` para leer la fecha de trabajo.
+   */
+  plannedOn?: string;
+  /** Fijada: la replanificación no la mueve nunca. */
+  pinned?: boolean;
+  /** Cuántas veces se movió a un día posterior. */
+  postponedCount?: number;
+  /** No entra antes de su fecha límite. */
+  conflict?: boolean;
   // Presentes solo en las ocurrencias de una serie recurrente.
   seriesId?: string;
   occurrenceDate?: string;

@@ -271,3 +271,27 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS prep_calendar_min SMALLINT
   CHECK (prep_calendar_min IS NULL OR prep_calendar_min BETWEEN 0 AND 240);
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS prep_reminder_min SMALLINT
   CHECK (prep_reminder_min IS NULL OR prep_reminder_min BETWEEN 0 AND 240);
+
+-- Etapa 8: fecha planificada vs fecha límite. due_date es SIEMPRE la fecha límite; planned_on es
+-- "cuándo hacerla" cuando la replanificación la movió (NULL = el día que vence). pinned: no se mueve nunca.
+-- replan_conflict: no entra antes de su fecha límite (se ofrecen correr la fecha o más minutos por día).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS planned_on DATE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS replan_conflict BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Lo que el replan movió, para contárselo al usuario y poder deshacerlo (por ítem).
+CREATE TABLE IF NOT EXISTS replan_moves (
+  id                    TEXT PRIMARY KEY,
+  user_id               TEXT NOT NULL,
+  task_id               TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  title                 TEXT NOT NULL,
+  from_date             DATE NOT NULL,
+  to_date               DATE NOT NULL,
+  prev_planned_on       DATE,
+  prev_postponed_count  INTEGER NOT NULL DEFAULT 0,
+  moved_on              DATE NOT NULL,
+  seen                  BOOLEAN NOT NULL DEFAULT FALSE,
+  undone                BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS replan_moves_user_idx ON replan_moves (user_id, seen);
