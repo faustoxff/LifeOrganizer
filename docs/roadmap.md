@@ -18,8 +18,8 @@ contexto de hacia dónde va el producto y qué decisiones ya están tomadas.
 1. **Modelo de datos** (hecha).
 2. **Scheduler determinístico** (hecha).
 3. **Flujo de proyecto** (hecha).
-4. **Milo con tool calling y planificación semanal** ← etapa actual (diseño al final de este documento).
-5. Memoria estructurada y checklists.
+4. **Milo con tool calling y planificación semanal** (hecha).
+5. **Memoria estructurada y checklists** ← etapa actual (diseño al final de este documento).
 
 Google Calendar (importación y clasificación de eventos) queda para después.
 
@@ -449,3 +449,91 @@ del mismo módulo, que solo se usa en el fallback.
   duplicaba las que ya existían).
 - **Interruptores**: `GROQ_TOOLS=off` y `OLLAMA_TOOLS=on|off` mandan el chat al camino de texto sin
   tocar código.
+
+---
+
+## Etapa 5: Spark conoce al usuario
+
+Dos piezas que se alimentan entre sí: una **memoria estructurada** (hechos que el usuario
+dice de sí mismo) y **checklists de "no te olvides"** por actividad que aprenden de lo que el
+usuario usa. El resumen de `user_memory` sigue como está.
+
+### Memoria estructurada: `user_facts`
+
+`(id, user_id, key, value, source 'stated'|'inferred', confidence, updated_at)`, única por
+`(user_id, key)`. `key` es `snake_case` (`es_despistado`, `horario_mejor_rendimiento`, `deportes`),
+`value` una línea de hasta 200 caracteres, hasta 50 hechos por usuario.
+
+- **Milo los guarda con la tool `remember_fact`**, y solo dos caminos:
+  - `stated`: el usuario lo dijo. La tool exige `quote`, las palabras textuales del usuario, y el
+    servidor comprueba que **aparezcan en el mensaje actual**. Sin eso no se guarda: es la
+    forma de que "solo lo que dijo explícitamente" no dependa de la buena voluntad del modelo.
+  - `inferred`: lo dedujo Milo. **No se guarda**: vuelve al chat como una propuesta con
+    Guardar / No, y recién al confirmar se escribe (con `source = 'inferred'`).
+- Un hecho `stated` nunca lo pisa uno `inferred`. Si el usuario edita un hecho a mano, pasa a `stated`.
+- **Datos sensibles: no se guardan.** `lib/sensitive.ts` rechaza en el servidor (en la tool, en la
+  API y al editar) salud, finanzas, identificadores (documentos, tarjetas, mails, teléfonos,
+  contraseñas) y creencias, política u orientación. Es una lista de palabras en varios idiomas:
+  atrapa lo obvio, no es un clasificador. Por eso hay tres capas: el prompt le dice a Milo que no
+  los proponga, el servidor los rechaza, y la pantalla deja borrar todo.
+- **Pantalla "Lo que Spark sabe de vos"** (`/knowledge`): cada hecho con su origen, editar y borrar;
+  las listas aprendidas por actividad, con borrar; la ubicación aproximada, con borrar. **Borrar
+  es un `DELETE` real**, sin marca de "borrado".
+- Milo recibe los hechos **relevantes**, no todos: los que comparten palabras con la conversación
+  y las tareas, más un núcleo chico (`es_despistado`, `horario_mejor_rendimiento`). Van en el
+  bloque dinámico del prompt, marcados como datos del usuario y no como instrucciones.
+- Free no tiene tools, así que no guarda hechos por chat. Los hechos y las listas son Plus/Pro.
+
+### Checklists por actividad: `activity_checklists`
+
+`(id, user_id, activity_key, series_id NULL, items JSONB)` con
+`items = [{text, uses, skips, lastUsedAt, season?, weather?}]`.
+
+- **`activity_key`** normalizado: minúsculas, sin acentos, sin espacios (`gimnasio`). El catálogo
+  (`lib/activity.ts`) reconoce por reglas: gimnasio, correr, deporte, pileta, playa, yoga,
+  facultad, trabajo, viaje y médico, con sus palabras en varios idiomas.
+- **Detección**: reglas primero; lo que no reconocen, en **una sola llamada de IA barata (tier
+  `fast`) por lote** de hasta 15 títulos, con caché por usuario y título (`activity_titles`, que
+  también guarda "esto no es una actividad" para no reintentar). Sin activity, sin checklist.
+- **Lista de un usuario**: la de la serie si la hay (`series_id`), si no la de la actividad. Una
+  lista nace ligada a la serie cuando viene de una serie.
+- **Primera vez**: la IA propone la lista con los hechos del usuario, la **época del año** (el
+  hemisferio sale de la zona horaria: `lib/season.ts`) y, si hay ubicación aproximada, el **clima
+  del día** de Open-Meteo (gratis, sin API key; fallo o sin ubicación = se omite el clima). Marca
+  los ítems condicionales con `season` (`summer`/`winter`) o `weather` (`rain`/`cold`/`hot`).
+- **Ubicación**: opcional, la da el usuario con un botón, se guarda **redondeada a 0,1°** (~10 km)
+  y se borra desde la pantalla. Solo sirve para el clima.
+- **Snapshot por ocurrencia** (`tasks.checklist`): la lista de ese día, con el clima que se usó y
+  el estado de cada ítem (tildado, sacado). Se arma al primer uso.
+- **Selección** (`selectItems`, pura): ítems sin condición ordenados por uso; los de `season` solo
+  en esa época, los de `weather` solo con ese clima; los que se saltaron 3 veces seguidas ya no
+  están; hasta 10.
+- **Aprendizaje**, al completar la tarea/ocurrencia (`mergeLearning`, pura):
+  - lo que sigue en la lista: `uses + 1`, `skips = 0`, `lastUsedAt`;
+  - lo que el usuario sacó con la ✕ ("hoy no lo necesito"): `skips + 1`; con **3 seguidos**
+    desaparece de la lista guardada;
+  - lo que agregó a mano: entra (o suma) `uses` **al momento de agregarlo**, y no se cuenta dos veces
+    al completar.
+  No se aprende de una ocurrencia salteada ni de una tarea que nunca se completó.
+- **Avisos**: la checklist aparece dentro de la tarea/ocurrencia y en una notificación **antes de
+  la hora** (`lib/use-reminders.ts`; 10, 30 o 60 minutos, por defecto 30). Con el hecho
+  `es_despistado` el aviso está activo por defecto; si no, la checklist ofrece activarlo. Solo
+  funciona con Spark abierto, como el resto de los avisos.
+
+### Milo y las recomendaciones
+
+Si la conversación (o las tareas de esa semana) menciona una actividad con lista guardada, el
+prompt de Milo incluye esos ítems para que pueda decir "acordate de llevar…". La recomendación
+del día recibe el hecho `horario_mejor_rendimiento`.
+
+### Planes, límites y costos
+
+Detectar por IA (`checklist_detect`: Plus 10/día, Pro 30) y armar una lista inicial
+(`checklist_generate`: Plus 20, Pro 60) son Plus/Pro y cuentan en `ai_token_log`. Aprender,
+tildar y editar no gastan IA. Si la IA falla, la checklist queda vacía y el usuario la arma a
+mano: nada se inventa.
+
+### Modelo de datos (migración aditiva)
+
+`user_facts`, `activity_checklists`, `activity_titles`, `tasks.checklist` y
+`user_settings.approx_lat/approx_lon`. Todo con `IF NOT EXISTS`.
