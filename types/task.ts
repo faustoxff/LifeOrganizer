@@ -1,3 +1,5 @@
+import type { TaskChecklist } from "@/lib/checklist";
+
 export type TaskPriority = "low" | "medium" | "high";
 
 /**
@@ -57,6 +59,8 @@ export interface Task extends Omit<TaskInput, "repeat"> {
   completedAt?: string;
   // Small concrete sub-steps (AI-generated or edited by the user).
   steps?: TaskStep[];
+  /** La checklist de "no te olvides" de esta tarea/ocurrencia, si ya se armó. */
+  checklist?: TaskChecklist;
   // Presentes solo en las ocurrencias de una serie recurrente.
   seriesId?: string;
   occurrenceDate?: string;

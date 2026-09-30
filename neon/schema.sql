@@ -196,3 +196,56 @@ CREATE TABLE IF NOT EXISTS ai_token_log (
 );
 
 CREATE INDEX IF NOT EXISTS ai_token_log_user_idx ON ai_token_log (user_id, created_at);
+
+-- ---------------------------------------------------------------------------
+-- Roadmap etapa 5: memoria estructurada y checklists (ver docs/roadmap.md)
+-- ---------------------------------------------------------------------------
+
+-- Hechos que el usuario dice de si mismo. Una fila por (usuario, clave). Borrar es un
+-- DELETE real: no hay marca de "borrado".
+CREATE TABLE IF NOT EXISTS user_facts (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  key        TEXT NOT NULL CHECK (key ~ '^[a-z][a-z0-9_]{1,39}$'),
+  value      TEXT NOT NULL CHECK (char_length(value) BETWEEN 1 AND 200),
+  source     TEXT NOT NULL CHECK (source IN ('stated', 'inferred')),
+  confidence REAL NOT NULL DEFAULT 1 CHECK (confidence >= 0 AND confidence <= 1),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS user_facts_user_idx ON user_facts (user_id);
+
+-- La lista de "no te olvides" de una actividad. `series_id` liga la lista a una serie
+-- (por ejemplo, el gimnasio de los martes); sin serie es la lista de la actividad.
+-- items: [{text, uses, skips, lastUsedAt, season?, weather?}]
+CREATE TABLE IF NOT EXISTS activity_checklists (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL,
+  activity_key TEXT NOT NULL,
+  series_id    TEXT REFERENCES task_series(id) ON DELETE CASCADE,
+  items        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS activity_checklists_uniq
+  ON activity_checklists (user_id, activity_key, COALESCE(series_id, ''));
+CREATE INDEX IF NOT EXISTS activity_checklists_user_idx ON activity_checklists (user_id);
+
+-- Que actividad es un titulo, por usuario. activity_key '' = "no es una actividad": evita
+-- volver a preguntarle a la IA por el mismo titulo.
+CREATE TABLE IF NOT EXISTS activity_titles (
+  user_id      TEXT NOT NULL,
+  title_norm   TEXT NOT NULL,
+  activity_key TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, title_norm)
+);
+
+-- La checklist de esa ocurrencia: la lista del dia, el clima que se uso y el estado de cada item.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklist JSONB;
+
+-- Ubicacion aproximada (redondeada a 0,1 grados, unos 10 km). Solo sirve para el clima.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS approx_lat REAL;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS approx_lon REAL;
