@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BarChart3, Bell, Clock, LogOut, Zap, X, ArrowUpRight, ListChecks, MessageCircle, PanelLeft } from "lucide-react";
+import { BarChart3, Bell, Brain, Clock, LogOut, Zap, X, ArrowUpRight, ListChecks, MessageCircle, PanelLeft } from "lucide-react";
 import { AvailabilityDialog } from "@/components/availability-dialog";
 import { CalendarView } from "@/components/calendar-view";
 import { FocusMode } from "@/components/focus-mode";
@@ -18,6 +18,7 @@ import { PlanZapIcon } from "@/components/plan-zap-icon";
 import { ScopeDialog } from "@/components/scope-dialog";
 import { getUserDisplayName } from "@/lib/auth";
 import { DEFAULT_AVAILABILITY, parseAvailability, type Availability } from "@/lib/availability";
+import { TaskChecklist } from "@/components/task-checklist";
 import { TaskForm, type ProjectStartInput } from "@/components/task-form";
 import { Button } from "@/components/ui/button";
 import { TextAnimate } from "@/components/ui/text-animate";
@@ -28,6 +29,7 @@ import { DEFAULT_ESTIMATE_MIN } from "@/lib/task-estimate";
 import { getSkippedDates, isFutureOccurrence, isRecommendable, isSkipped } from "@/lib/task-views";
 import type { EditScope } from "@/lib/task-validation";
 import { focusCopy, reminderCopy } from "@/lib/focus-copy";
+import { useChecklists } from "@/lib/use-checklists";
 import { useReminders } from "@/lib/use-reminders";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { AnimatePresence } from "motion/react";
@@ -51,7 +53,7 @@ export function LifeOrganizerApp() {
   const { copy, language } = useAppLanguage();
   const { user, logout } = useAuth();
   const displayName = getUserDisplayName(user);
-  const { plan, trialDaysLeft, trialEnded } = useUserPlan();
+  const { plan, trialDaysLeft, trialEnded, isLoaded: planLoaded } = useUserPlan();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -322,6 +324,25 @@ export function LifeOrganizerApp() {
   }, [aiRequestKey, aiRequestTasks, isLoaded, language]);
 
   const reminders = useReminders(todayTasks, language, isLoaded, user.id);
+
+  // Permiso de notificaciones para el aviso de la checklist. Se pide aparte del aviso diario: activar
+  // uno no debe prender el otro.
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+  useEffect(() => {
+    setNotifPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  }, []);
+  const enableChecklistNotifications = useCallback(async () => {
+    if (typeof Notification === "undefined") return;
+    setNotifPermission(await Notification.requestPermission());
+  }, []);
+  const checklists = useChecklists({
+    tasks,
+    plan,
+    planLoaded: planLoaded,
+    userId: user.id,
+    language,
+    notificationsGranted: notifPermission === "granted"
+  });
   const focusTask = focusTaskId ? tasks.find((t) => t.id === focusTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((t) => t.id === editingTaskId) ?? null : null;
 
@@ -717,6 +738,15 @@ export function LifeOrganizerApp() {
             <Clock className="h-4 w-4" />
           </button>
 
+          <Link
+            href="/knowledge"
+            className="flex items-center gap-1.5 rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label={copy.knowledge.title}
+            title={copy.knowledge.title}
+          >
+            <Brain className="h-4 w-4" />
+          </Link>
+
           {plan === "pro" && (
             <Link
               href="/stats"
@@ -841,6 +871,17 @@ export function LifeOrganizerApp() {
             onQuickAdd={handleQuickAdd}
             projectProgress={projectProgress}
             onOpenProject={setDetailProjectId}
+            renderTaskExtra={(task) => (
+              <TaskChecklist
+                task={task}
+                api={checklists}
+                notifications={{
+                  granted: notifPermission === "granted",
+                  canAsk: notifPermission === "default",
+                  enable: () => void enableChecklistNotifications()
+                }}
+              />
+            )}
             extraPending={todaySessions.length}
             projectSlot={
               <TodayProjectSessions

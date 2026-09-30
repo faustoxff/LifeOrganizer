@@ -17,7 +17,7 @@ import { getTaskPriorityLabel } from "@/lib/task-labels";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { cn } from "@/lib/utils";
 import { WeekProposalCard } from "@/components/week-proposal-card";
-import type { WeekProposal } from "@/types/milo";
+import type { FactProposal, SavedFact, WeekProposal } from "@/types/milo";
 import { Task, TaskInput } from "@/types/task";
 import { useUser } from "@clerk/nextjs";
 
@@ -61,6 +61,10 @@ type Message = {
   taskActions?: TaskInput[];
   /** Solo cuando Milo armó la semana: se muestra como tarjeta por día en vez de lista. */
   proposal?: WeekProposal;
+  /** Lo que Milo guardó porque el usuario lo dijo. */
+  factsSaved?: SavedFact[];
+  /** Lo que Milo dedujo: no está guardado hasta que el usuario lo confirma. */
+  factProposals?: Array<FactProposal & { state?: "saving" | "saved" | "error" }>;
   taskCreated?: boolean;
 };
 
@@ -223,6 +227,8 @@ export function MiloChat({
         error?: string;
         taskActions?: TaskInput[];
         proposal?: WeekProposal | null;
+        factsSaved?: SavedFact[];
+        factProposals?: FactProposal[];
       };
 
       const hasActions = Boolean(data.taskActions && data.taskActions.length > 0);
@@ -230,7 +236,9 @@ export function MiloChat({
         role: "milo",
         content: data.response ?? data.error ?? copy.milo.noConnection,
         ...(hasActions ? { taskActions: data.taskActions } : {}),
-        ...(hasActions && data.proposal ? { proposal: data.proposal } : {})
+        ...(hasActions && data.proposal ? { proposal: data.proposal } : {}),
+        ...(data.factsSaved && data.factsSaved.length > 0 ? { factsSaved: data.factsSaved } : {}),
+        ...(data.factProposals && data.factProposals.length > 0 ? { factProposals: data.factProposals } : {})
       };
       // Una propuesta nueva reemplaza a la anterior sin confirmar (por ejemplo, cuando el
       // usuario pidió un cambio): dos tarjetas con botones apuntando a lo mismo, una de
@@ -277,6 +285,33 @@ export function MiloChat({
     } finally {
       setIsCreatingTask(false);
     }
+  }
+
+  // Confirmar un hecho que Milo dedujo: recién acá se guarda.
+  async function handleConfirmFact(msgIndex: number, key: string) {
+    const patch = (state: "saving" | "saved" | "error") =>
+      setMessages((prev) =>
+        prev.map((m, i) => (i === msgIndex ? { ...m, factProposals: m.factProposals?.map((f) => (f.key === key ? { ...f, state } : f)) } : m))
+      );
+    const proposal = messages[msgIndex]?.factProposals?.find((f) => f.key === key);
+    if (!proposal) return;
+    patch("saving");
+    try {
+      const res = await fetch("/api/facts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: proposal.key, value: proposal.value, confidence: proposal.confidence })
+      });
+      patch(res.ok ? "saved" : "error");
+    } catch {
+      patch("error");
+    }
+  }
+
+  function handleDismissFact(msgIndex: number, key: string) {
+    setMessages((prev) =>
+      prev.map((m, i) => (i === msgIndex ? { ...m, factProposals: m.factProposals?.filter((f) => f.key !== key) } : m))
+    );
   }
 
   function handleDismissTask(msgIndex: number) {
@@ -422,6 +457,48 @@ export function MiloChat({
                 </div>
               </div>
             )}
+
+            {msg.factsSaved?.map((fact) => (
+              <div key={`saved-${fact.key}`} className="mt-1 flex items-center gap-1 text-xs text-muted-foreground" data-testid="fact-saved">
+                <CheckCircle className="h-3 w-3 text-primary" />
+                {copy.facts.remembered}: {fact.value}
+              </div>
+            ))}
+
+            {msg.factProposals?.map((fact) => (
+              <div key={`proposal-${fact.key}`} className="mt-2 w-full max-w-[85%] space-y-1.5 rounded-xl border border-border bg-card p-3" data-testid="fact-proposal">
+                <p className="text-xs font-semibold text-foreground">{copy.facts.proposal}</p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">{fact.key.replace(/_/g, " ")}: </span>
+                  {fact.value}
+                </p>
+                {fact.state === "saved" ? (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckCircle className="h-3 w-3 text-primary" /> {copy.facts.saved}
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <button
+                      onClick={() => void handleConfirmFact(i, fact.key)}
+                      disabled={fact.state === "saving"}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      <CheckCircle className="h-3 w-3" />
+                      {copy.facts.save}
+                    </button>
+                    <button
+                      onClick={() => handleDismissFact(i, fact.key)}
+                      disabled={fact.state === "saving"}
+                      className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium text-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      <XCircle className="h-3 w-3" />
+                      {copy.facts.dismiss}
+                    </button>
+                    {fact.state === "error" && <span className="text-xs text-destructive">{copy.facts.error}</span>}
+                  </div>
+                )}
+              </div>
+            ))}
 
             {msg.taskCreated && (
               <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

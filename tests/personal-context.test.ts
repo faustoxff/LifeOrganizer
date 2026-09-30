@@ -101,7 +101,7 @@ describe("el prompt con lo personal", () => {
     expect(text).toContain("remember_fact");
     expect(text).toMatch(/SOLO si lo dijo él/);
     expect(text).toMatch(/quote copiá SUS palabras textuales/);
-    expect(text).toMatch(/inferred.*NO está guardado/s);
+    expect(text).toMatch(/inferred[\s\S]*NO está guardado/);
     expect(text).toMatch(/NUNCA guardes ni propongas salud/);
     expect(text).toMatch(/No podés borrar datos/);
   });

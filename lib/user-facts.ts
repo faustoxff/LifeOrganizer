@@ -39,7 +39,6 @@ export function normalizeFactKey(raw: unknown): string | null {
 /** Una línea, sin caracteres de control ni saltos: un valor no puede colar instrucciones en varias líneas. */
 export function cleanFactValue(raw: unknown): string {
   if (typeof raw !== "string") return "";
-  // eslint-disable-next-line no-control-regex
   return raw.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
 }
 

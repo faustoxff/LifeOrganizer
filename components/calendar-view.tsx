@@ -77,6 +77,8 @@ type CalendarViewProps = {
   /** Progreso X/Y por id de proyecto: las filas de proyecto lo muestran. */
   projectProgress?: Record<string, { done: number; total: number }>;
   onOpenProject?: (projectId: string) => void;
+  /** Lo que se muestra debajo de cada tarea (por ejemplo, su checklist de "no te olvides"). */
+  renderTaskExtra?: (task: Task) => ReactNode;
   /** Lo que va entre la recomendación y los recordatorios: las sesiones de proyectos de hoy. */
   projectSlot?: ReactNode;
   /** Sesiones de proyecto de hoy: se suman al conteo de pendientes del encabezado. */
@@ -98,6 +100,7 @@ export function CalendarView({
   onQuickAdd,
   projectProgress,
   onOpenProject,
+  renderTaskExtra,
   projectSlot,
   extraPending = 0
 }: CalendarViewProps) {
@@ -203,6 +206,7 @@ export function CalendarView({
         onEdit={() => onEditTask(task.id)}
         onDelete={() => void onDeleteTask(task.id)}
         onFocus={() => onFocusTask(task.id)}
+        extra={renderTaskExtra?.(task)}
         progress={task.kind === "project" ? projectProgress?.[task.id] : undefined}
         onOpenProject={task.kind === "project" && onOpenProject ? () => onOpenProject(task.id) : undefined}
       />
@@ -602,9 +606,10 @@ type TaskRowProps = {
   onFocus: () => void;
   progress?: { done: number; total: number };
   onOpenProject?: () => void;
+  extra?: ReactNode;
 };
 
-function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus, progress, onOpenProject }: TaskRowProps) {
+function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus, progress, onOpenProject, extra }: TaskRowProps) {
   const { copy } = useAppLanguage();
   const focusT = focusCopy[language];
   const steps = task.steps ?? [];
@@ -678,6 +683,7 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
             </span>
           )}
         </div>
+        {extra}
       </div>
 
       <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
