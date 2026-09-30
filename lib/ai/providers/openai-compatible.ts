@@ -8,6 +8,7 @@ import {
   type TokenUsage
 } from "@/lib/ai/types";
 import type { ModelTier, ProviderAdapter, ProviderRequest } from "@/lib/ai/types";
+import { readToolCalls, toWireMessages, toWireTools } from "@/lib/ai/tool-wire";
 
 /**
  * Factory for any provider that speaks the OpenAI chat-completions dialect.
@@ -25,11 +26,14 @@ export function createOpenAICompatibleProvider(config: {
   /** Send `reasoning_effort` when the caller sets one. */
   supportsReasoningEffort?: boolean;
   extraHeaders?: Record<string, string>;
+  /** Whether `model` can be sent tools. Absent = never. */
+  supportsTools?: (model: string) => boolean;
 }): ProviderAdapter {
   return {
     id: config.id,
     label: config.label,
     supportsReasoningEffort: config.supportsReasoningEffort ?? false,
+    ...(config.supportsTools ? { supportsTools: config.supportsTools } : {}),
 
     configured() {
       return Boolean(process.env[config.apiKeyEnv]);
@@ -52,10 +56,14 @@ export function createOpenAICompatibleProvider(config: {
 
       const body: Record<string, unknown> = {
         model: request.model,
-        messages: request.messages,
+        messages: toWireMessages(request.messages),
         temperature: request.temperature,
         max_tokens: request.maxTokens
       };
+      if (request.tools?.length) {
+        body.tools = toWireTools(request.tools);
+        body.tool_choice = request.toolChoice ?? "auto";
+      }
       if (config.supportsReasoningEffort && request.reasoningEffort !== undefined) {
         body.reasoning_effort = request.reasoningEffort;
       }
@@ -98,7 +106,10 @@ export function createOpenAICompatibleProvider(config: {
 
       const payload = (await response.json()) as {
         model?: string;
-        choices?: Array<{ message?: { content?: string }; finish_reason?: string | null }>;
+        choices?: Array<{
+          message?: { content?: string | null; tool_calls?: unknown };
+          finish_reason?: string | null;
+        }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
@@ -111,6 +122,7 @@ export function createOpenAICompatibleProvider(config: {
       return {
         content: choice?.message?.content ?? "",
         finishReason: choice?.finish_reason ?? null,
+        toolCalls: readToolCalls(choice?.message?.tool_calls),
         model: payload.model ?? request.model,
         provider: config.id,
         usage

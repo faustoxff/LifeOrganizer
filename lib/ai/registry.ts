@@ -1,5 +1,5 @@
 import "server-only";
-import type { ProviderAdapter } from "@/lib/ai/types";
+import type { ModelTier, ProviderAdapter } from "@/lib/ai/types";
 import { groqProvider } from "@/lib/ai/providers/groq";
 import { ollamaProvider } from "@/lib/ai/providers/ollama";
 
@@ -43,6 +43,16 @@ export function getProviderChain(): ProviderAdapter[] {
  */
 export function chainSupportsVision(): boolean {
   return getProviderChain().some((provider) => provider.configured() && provider.supportsVision === true);
+}
+
+/**
+ * Whether at least one configured provider can take tools with the model it would use
+ * for `tier`. False sends Milo down the TASKS_ACTION text path instead.
+ */
+export function chainSupportsTools(tier: ModelTier): boolean {
+  return getProviderChain().some(
+    (provider) => provider.configured() && provider.supportsTools?.(provider.modelFor(tier)) === true
+  );
 }
 
 /**

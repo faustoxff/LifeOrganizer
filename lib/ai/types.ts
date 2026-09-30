@@ -13,6 +13,33 @@ export type ChatRole = "system" | "user" | "assistant";
 export type ChatMessage = { role: ChatRole; content: string };
 
 /**
+ * Tool calling. A tool is declared once (name, description, JSON schema) and the
+ * model answers with calls to it instead of writing a machine block inside its text.
+ * `arguments` stays the raw JSON string the model produced: parsing (and rejecting
+ * what does not parse) is the caller's job, because only the caller knows the schema.
+ */
+export type ToolSpec = {
+  name: string;
+  description: string;
+  /** JSON Schema of the arguments object. */
+  parameters: Record<string, unknown>;
+};
+
+export type ToolCall = { id: string; name: string; arguments: string };
+
+/** An assistant turn that asked for tools. `content` is whatever text came with it. */
+export type AssistantToolMessage = { role: "assistant"; content: string; toolCalls: ToolCall[] };
+
+/** The result of one call, sent back so the model can continue. */
+export type ToolResultMessage = { role: "tool"; toolCallId: string; content: string };
+
+/** Everything a provider can be sent: plain messages plus the two tool-loop ones. */
+export type AgentMessage = ChatMessage | AssistantToolMessage | ToolResultMessage;
+
+/** "auto" lets the model decide, "none" forces a plain-text answer. */
+export type ToolChoice = "auto" | "none";
+
+/**
  * Quality tier. Callers declare what they need rather than the chain guessing
  * from the text: a deterministic guess at "is this message simple" is a guess,
  * and a wrong guess either costs quality or costs money. The cheap callers
@@ -34,17 +61,26 @@ export type Completion = {
   content: string;
   /** OpenAI-style: "stop" | "length" | "tool_calls" | ... */
   finishReason: string | null;
+  /** Present only when the model asked for tools. */
+  toolCalls?: ToolCall[];
   model: string;
   provider: string;
   usage: TokenUsage;
 };
 
 export type CompletionRequest = {
-  messages: ChatMessage[];
+  messages: AgentMessage[];
   tier: ModelTier;
   timeoutMs: number;
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Tools the model may call. Only providers whose configured model supports tools
+   * are tried; if none does, the call fails with a `bad_request` so the caller can
+   * fall back to a text-only path.
+   */
+  tools?: ToolSpec[];
+  toolChoice?: ToolChoice;
   /**
    * Providers to try in order. Defaults to the configured chain. Callers set
    * this only in tests.
@@ -208,7 +244,9 @@ export function classifyFailure(input: {
 }
 
 export type ProviderRequest = {
-  messages: ChatMessage[];
+  messages: AgentMessage[];
+  tools?: ToolSpec[];
+  toolChoice?: ToolChoice;
   model: string;
   maxTokens: number;
   temperature: number;
@@ -226,6 +264,8 @@ export type ProviderAdapter = {
   modelFor(tier: ModelTier): string;
   complete(request: ProviderRequest): Promise<Completion>;
   supportsReasoningEffort?: boolean;
+  /** Whether `model` can be sent `tools`. Absent = no. Asked per model: a fallback model may not. */
+  supportsTools?(model: string): boolean;
   /**
    * Whether the configured models can read images. Messages are plain text today,
    * so no adapter claims it; the project flow leaves images out because of it.

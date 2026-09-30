@@ -10,6 +10,7 @@ import {
   type TokenUsage
 } from "@/lib/ai/types";
 import type { ProviderAdapter, ProviderRequest } from "@/lib/ai/types";
+import { readToolCalls, toWireMessages, toWireTools } from "@/lib/ai/tool-wire";
 
 /**
  * Groq keeps the SDK it always had. Swapping it for the OpenAI-compatible
@@ -21,6 +22,12 @@ export const groqProvider: ProviderAdapter = {
   label: "Groq",
   supportsReasoningEffort: false,
   supportsVision: false,
+
+  // Both default models (qwen3 and gpt-oss) call tools on Groq. GROQ_TOOLS=off is the
+  // escape hatch if a model swap breaks it: chat drops to the TASKS_ACTION text path.
+  supportsTools() {
+    return process.env.GROQ_TOOLS !== "off";
+  },
 
   configured() {
     return Boolean(process.env.GROQ_API_KEY);
@@ -46,9 +53,15 @@ export const groqProvider: ProviderAdapter = {
       const response = await client.chat.completions.create(
         {
           model: request.model,
-          messages: request.messages as Groq.Chat.ChatCompletionMessageParam[],
+          messages: toWireMessages(request.messages) as Groq.Chat.ChatCompletionMessageParam[],
           temperature: request.temperature,
-          max_tokens: request.maxTokens
+          max_tokens: request.maxTokens,
+          ...(request.tools?.length
+            ? {
+                tools: toWireTools(request.tools) as Groq.Chat.ChatCompletionTool[],
+                tool_choice: request.toolChoice ?? "auto"
+              }
+            : {})
         },
         { signal: AbortSignal.timeout(request.timeoutMs) }
       );
@@ -62,6 +75,7 @@ export const groqProvider: ProviderAdapter = {
       return {
         content: choice?.message?.content ?? "",
         finishReason: choice?.finish_reason ?? null,
+        toolCalls: readToolCalls(choice?.message?.tool_calls),
         model: response.model ?? request.model,
         provider: "groq",
         usage

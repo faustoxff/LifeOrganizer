@@ -45,11 +45,26 @@ export async function complete(request: CompletionRequest): Promise<Completion> 
         .filter((provider): provider is ProviderAdapter => Boolean(provider))
     : base;
 
-  const available = chain.filter((provider) => provider.configured());
-  if (available.length === 0) {
+  const configured = chain.filter((provider) => provider.configured());
+  if (configured.length === 0) {
     throw new ProviderError("No hay ningún proveedor de IA configurado", {
       provider: "chain",
       kind: "auth"
+    });
+  }
+
+  // A provider that cannot take tools is skipped, not tried and failed: a model that
+  // ignores `tools` answers in prose, which the caller would take for a real reply
+  // that just happened to call nothing. Skipping also keeps it out of the breaker.
+  const wantsTools = Boolean(request.tools?.length);
+  const available = wantsTools
+    ? configured.filter((provider) => provider.supportsTools?.(provider.modelFor(request.tier)) === true)
+    : configured;
+  if (available.length === 0) {
+    throw new ProviderError("Ningún proveedor configurado soporta tools con el modelo elegido", {
+      provider: "chain",
+      kind: "bad_request",
+      kinds: ["bad_request"]
     });
   }
 
@@ -74,7 +89,8 @@ export async function complete(request: CompletionRequest): Promise<Completion> 
       temperature,
       timeoutMs: request.timeoutMs,
       tier: request.tier,
-      reasoningEffort: resolveReasoningEffort(provider, request.tier)
+      reasoningEffort: resolveReasoningEffort(provider, request.tier),
+      ...(wantsTools ? { tools: request.tools, toolChoice: request.toolChoice ?? "auto" } : {})
     };
 
     try {

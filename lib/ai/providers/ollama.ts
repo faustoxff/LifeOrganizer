@@ -20,6 +20,14 @@ export const ollamaProvider = createOpenAICompatibleProvider({
   baseUrl: process.env.OLLAMA_BASE_URL ?? "https://ollama.com/v1",
   apiKeyEnv: "OLLAMA_API_KEY",
   supportsReasoningEffort: true,
+  // gpt-oss is the model the chain is built around and it calls tools on Ollama Cloud.
+  // Any other model is assumed not to until OLLAMA_TOOLS=on says otherwise, because a
+  // model that ignores `tools` fails silently rather than loudly. When this is false the
+  // chat falls back to the TASKS_ACTION text path.
+  supportsTools: (model) =>
+    process.env.OLLAMA_TOOLS === "off"
+      ? false
+      : process.env.OLLAMA_TOOLS === "on" || /^gpt-oss/i.test(model),
   models: {
     fast: process.env.OLLAMA_FAST_MODEL ?? "gpt-oss:20b",
     standard: process.env.OLLAMA_MODEL ?? "gpt-oss:120b",
