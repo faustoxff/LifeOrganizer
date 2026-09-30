@@ -15,12 +15,24 @@ import type { Task, TaskInput } from "@/types/task";
  * Local ones would read the server's zone and be wrong for anyone else.
  */
 
+/**
+ * "tools": Milo llama a create_items / plan_week / get_schedule / ask_user (el camino
+ * normal). "legacy": Milo escribe un bloque TASKS_ACTION al final de su texto y
+ * `parseTaskActions` lo lee. Solo se usa cuando ningún proveedor configurado puede tomar
+ * tools con su modelo; es el único lugar del prompt que conoce ese formato.
+ */
+export type PromptMode = "tools" | "legacy";
+
 export type BuildContextOptions = {
   tasks?: Task[];
+  /** Los ítems de una propuesta que el usuario todavía no confirmó ni descartó. */
+  pendingTaskActions?: TaskInput[];
+  /** Un solo ítem pendiente. Compatibilidad con el formato anterior; se suma a la lista. */
   pendingTaskAction?: TaskInput | null;
   canCreateTasks: boolean;
   userMemory?: string;
   now?: Date;
+  mode?: PromptMode;
 };
 
 const isoDate = (d: Date) => d.toISOString().split("T")[0];
@@ -34,6 +46,8 @@ const isoDate = (d: Date) => d.toISOString().split("T")[0];
  * and starts answering it as a batch.
  */
 const MAX_PENDING_TASKS_IN_PROMPT = 25;
+/** Ítems de una propuesta pendiente que se muestran en el prompt. */
+const MAX_PENDING_PROPOSAL_ITEMS = 25;
 
 function spanishShortDate(date: Date): string {
   return date.toLocaleDateString("es-AR", {
@@ -72,6 +86,9 @@ function dateReferences(now: Date): string {
   in3.setUTCDate(in3.getUTCDate() + 3);
   const in7 = new Date(now);
   in7.setUTCDate(in7.getUTCDate() + 7);
+  // Lunes estrictamente posterior a hoy: es el weekStart de "la semana que viene".
+  const nextMonday = new Date(now);
+  nextMonday.setUTCDate(nextMonday.getUTCDate() + (((8 - nextMonday.getUTCDay()) % 7) || 7));
 
   return `
 Fechas ya resueltas. NO calcules fechas vos ni supongas el día de la semana:
@@ -80,11 +97,25 @@ Fechas ya resueltas. NO calcules fechas vos ni supongas el día de la semana:
 - "pasado mañana" = ${isoDate(new Date(now.getTime() + 2 * 86400000))}
 - "en 3 días" = ${isoDate(in3)}
 - "la semana que viene" = ${isoDate(in7)}
+- "el lunes que viene" (primer día de la semana que viene) = ${isoDate(nextMonday)}
 - Días de la semana (esta semana y las dos siguientes):
 ${rows.join("\n")}`;
 }
 
+const STYLE_AND_HONESTY = `Estilo:
+- Máximo 4 frases por defecto. Sin tablas, encabezados ni listas largas, salvo que pidan un plan detallado o "explicame en detalle".
+- Si el tema da para mucho, da lo esencial y preguntá si quieren más. Una respuesta larga es peor aunque sea buena.
+- Voseo rioplatense siempre: "Tenés", "Podés", "¿Querés?". Nunca "tienes", "puedes", "¿quieres?".
+
+Honestidad:
+- Si no sabés con certeza, decilo: "No tengo esa información".
+- NUNCA inventes hechos, fechas, precios, datos ni nombres reales. Si una pregunta factual no está en los resultados de búsqueda, admití que no sabés.
+- Es mejor "no sé" que una respuesta incorrecta.`;
+
 /**
+ * LEGACY. The rules for the `TASKS_ACTION` text block, used only when no configured
+ * provider can take tools. The normal path is `buildToolsStaticPrompt`.
+ *
  * The half of the prompt that never changes for a given plan.
  *
  * This is split out because it is the part worth caching. Ollama prices cached
@@ -97,17 +128,9 @@ ${rows.join("\n")}`;
  * every 24 hours, and a single changing character at the end of the prefix
  * invalidates the cache for everything before it.
  */
-function buildStaticPrompt(canCreateTasks: boolean, defaultDateExample: string): string {
+function buildLegacyStaticPrompt(canCreateTasks: boolean, defaultDateExample: string): string {
   return `
-Estilo:
-- Máximo 4 frases por defecto. Sin tablas, encabezados ni listas largas, salvo que pidan un plan detallado o "explicame en detalle".
-- Si el tema da para mucho, da lo esencial y preguntá si quieren más. Una respuesta larga es peor aunque sea buena.
-- Voseo rioplatense siempre: "Tenés", "Podés", "¿Querés?". Nunca "tienes", "puedes", "¿quieres?".
-
-Honestidad:
-- Si no sabés con certeza, decilo: "No tengo esa información".
-- NUNCA inventes hechos, fechas, precios, datos ni nombres reales. Si una pregunta factual no está en los resultados de búsqueda, admití que no sabés.
-- Es mejor "no sé" que una respuesta incorrecta.`.concat(
+${STYLE_AND_HONESTY}`.concat(
     canCreateTasks
       ? `
 
@@ -151,6 +174,43 @@ Nunca generes el bloque TASKS_ACTION para este usuario.`
   );
 }
 
+/**
+ * El prompt fijo del camino de tools. No lleva ninguna fecha (a diferencia del legacy,
+ * que muestra una en su ejemplo): es idéntico todos los días, así que el caché del
+ * proveedor no se invalida a la medianoche.
+ */
+function buildToolsStaticPrompt(canCreateTasks: boolean): string {
+  return `
+${STYLE_AND_HONESTY}`.concat(
+    canCreateTasks
+      ? `
+
+Herramientas. El usuario NO ve las llamadas: ve tu texto y, si proponés algo, una tarjeta con botones para confirmar o descartar. Ninguna herramienta crea nada por sí sola.
+
+Cuándo usar cada una:
+1. create_items: pide agendar, crear o recordar algo, o MENCIONA algo que hay que hacer, sobre todo con fecha o plazo ("agendame llamar al banco", "mañana rindo", "el viernes entrego"). Incluí TODOS los ítems del mensaje en UNA sola llamada; no dejes ninguno afuera por concentrarte en el más largo.
+2. plan_week: pide organizar, repartir o planificar la semana o varios días ("organizame la semana", "armame la semana", "cuándo hago todo esto"). Pasale las cosas NUEVAS que nombró. Lo que ya está en su lista ya cuenta como agendado: no lo repitas. Un ítem sin dueDate es flexible y se reparte; ponele dueDate SOLO si tiene que ser ese día exacto (turno, examen, algo con hora) y deadline si tiene que estar hecho para un día. El servidor ya mira su disponibilidad y su agenda.
+3. get_schedule: pregunta por lo que tiene o si le queda lugar ("¿qué tengo el jueves?", "¿estoy libre el martes?"). Resolvé los días con la tabla de fechas.
+4. ask_user: falta un dato IMPRESCINDIBLE y no hay un valor razonable ("organizame la semana" sin decir qué cosas; "agendame eso" sin decir qué). Una sola pregunta corta.
+
+Reglas:
+- Proponer, no preguntar (CRÍTICO): si dicen algo que hay que hacer, llamá la herramienta AHORA. No preguntes fecha u hora sueltas: usá la fecha por defecto y ajustan con un botón. Preguntar con ask_user es solo para lo que no se puede suponer.
+- Nada de charla ni preguntas de estado: si solo preguntan cómo van o qué tienen pendiente, respondé con la lista que ya tenés; no propongas nada.
+- Una recurrencia es UN ítem con repeat, nunca uno por cada vez. "gimnasio los miércoles y sábados" es un ítem con repeat weekly y weekdays [3,6]; "todos los días" es daily; "el 5 de cada mes" es monthly con monthDay 5. No pidas permiso ni te excuses por "saturar la agenda".
+- kind: reminder para una acción puntual de minutos (llamar, pagar, comprar), task para lo que lleva un rato, project para algo grande con fecha límite lejana. time solo si dijeron una hora. estimateMin: estimalo vos, con criterio (llamar 10, informe 90).
+- Las fechas salen de la tabla de abajo; no calcules ni supongas el día de la semana.
+- Proponés, no creás (CRÍTICO): la tarea todavía NO existe. NUNCA digas "he creado", "listo, agendado", "ya te lo guardé": es mentira. Decí "te propongo", "te dejo esto para confirmar".
+- Después de la herramienta escribí una respuesta corta (2 a 4 frases). Con plan_week no repitas el listado: el usuario ya ve la tarjeta con los días y las razones. Contá lo importante: qué día quedó más liviano, qué no entró y qué proponés hacer con eso (pasarlo a la semana que viene).
+- Cambios a una propuesta pendiente ("pasá el informe al miércoles", "sacá el gym", "agregá X"): volvé a llamar la MISMA herramienta con la lista COMPLETA ya modificada (con dueDate en lo que el usuario fijó). La nueva propuesta reemplaza a la anterior.
+- NUNCA inventes políticas o restricciones que no te di.`
+      : `
+
+Tareas: este usuario está en el plan Free y NO puede crear ni planificar tareas desde el chat (exclusivo de Plus y Pro).
+Si pide crear, agendar, recordar u organizar la semana ("agendá", "creá", "recuérdame", "nueva tarea"), explicá amablemente que por chat necesita Plus, y sugerí crearla con el botón "+" o hacer upgrade en /plans.
+No propongas tareas ni ítems a este usuario.`
+  );
+}
+
 export type TaskPromptParts = {
   /** Byte-stable per plan. Sent first so the provider can cache it. */
   static: string;
@@ -160,10 +220,12 @@ export type TaskPromptParts = {
 
 export function buildTaskPromptParts({
   tasks = [],
+  pendingTaskActions = [],
   pendingTaskAction = null,
   canCreateTasks,
   userMemory = "",
-  now = new Date()
+  now = new Date(),
+  mode = "tools"
 }: BuildContextOptions): TaskPromptParts {
   const today = isoDate(now);
   const sevenDaysLater = new Date(now);
@@ -233,18 +295,37 @@ Usa esto para personalizar tus respuestas cuando sea relevante, sin mencionar ex
     }
   }
 
-  if (pendingTaskAction) {
-    lines.push(`
-Tarea pendiente de confirmación del usuario: "${pendingTaskAction.title}" (${pendingTaskAction.category}).
+  const proposalItems = [...pendingTaskActions, ...(pendingTaskAction ? [pendingTaskAction] : [])];
+  if (proposalItems.length > 0) {
+    const shown = proposalItems.slice(0, MAX_PENDING_PROPOSAL_ITEMS);
+    const list = shown
+      .map((item) => {
+        const at = item.time ? ` ${item.time}` : "";
+        const again = item.repeat ? ", se repite" : "";
+        return `- ${item.title} — ${item.dueDate}${at}, ${item.estimateMin} min, ${item.kind}${again}`;
+      })
+      .join("\n");
+    const more = proposalItems.length > shown.length ? `\n(y ${proposalItems.length - shown.length} más)` : "";
+    lines.push(
+      mode === "tools"
+        ? `
+Propuesta pendiente de confirmación del usuario (todavía NO existe nada de esto):
+${list}${more}
+- Si sigue hablando del mismo tema, NO la menciones. Continuá normalmente.
+- Si pide cambiar algo de la propuesta, volvé a llamar la herramienta con la lista COMPLETA ya modificada: reemplaza a la anterior.
+- Si cambia claramente de tema, recordale brevemente que tiene esta propuesta para confirmar o descartar antes de continuar.`
+        : `
+Tarea pendiente de confirmación del usuario: "${proposalItems[0].title}" (${proposalItems[0].category}).${proposalItems.length > 1 ? ` Y ${proposalItems.length - 1} más en la misma propuesta.` : ""}
 - Si el usuario sigue hablando del mismo tema, NO la menciones. Continuá la conversación normalmente.
-- Si el usuario cambia claramente de tema, recordale brevemente que tiene esa tarea pendiente de confirmar o descartar antes de continuar.`);
+- Si el usuario cambia claramente de tema, recordale brevemente que tiene esa tarea pendiente de confirmar o descartar antes de continuar.`
+    );
   }
 
   return {
-    // The static half carries a date inside its own example, so it is built
-    // from the same `defaultDate` the dynamic half announces. It changes once
-    // a day, not once a turn, which keeps the cache warm for a whole day.
-    static: buildStaticPrompt(canCreateTasks, defaultDate),
+    // In tools mode the static half carries no date at all. The legacy one shows a date in
+    // its own example, built from the same `defaultDate` the dynamic half announces, so it
+    // changes once a day, not once a turn, which keeps the cache warm for a whole day.
+    static: mode === "legacy" ? buildLegacyStaticPrompt(canCreateTasks, defaultDate) : buildToolsStaticPrompt(canCreateTasks),
     dynamic: lines.join("\n")
   };
 }

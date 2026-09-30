@@ -1,14 +1,19 @@
 import "server-only";
 import { after, NextResponse } from "next/server";
+import { chainSupportsTools } from "@/lib/ai/registry";
 import { chatWithMilo, classifyChatFailure, refreshUserMemorySummary } from "@/lib/milo";
-import { buildTaskPromptParts } from "@/lib/milo-chat-prompt";
-import { parseTaskActions } from "@/lib/task-actions";
+import { runMiloAgent, toolsNotSupported } from "@/lib/milo-agent";
+import { buildTaskPromptParts, type PromptMode } from "@/lib/milo-chat-prompt";
+import { createToolContext } from "@/lib/milo-tools-server";
+import { normalizeTaskAction, parseTaskActions } from "@/lib/task-actions";
+import { getTodayInTimeZone } from "@/lib/task-date";
 import { getZonedNow } from "@/lib/task-date";
 import { resolveUserTimeZone } from "@/lib/user-settings";
 import { requireAuth, getUserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage, dailyLimitResponse } from "@/lib/usage-limits";
 import { clampTasksForPrompt, HISTORY_CONTENT_LIMIT, HISTORY_MESSAGES_LIMIT } from "@/lib/prompt-input";
 import { bumpMessageCount, getUserMemory, saveUserMemory, shouldRefreshMemory } from "@/lib/user-memory";
+import type { WeekProposal } from "@/types/milo";
 import { Task, TaskInput } from "@/types/task";
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -20,8 +25,30 @@ type MiloChatRequest = {
   message?: string;
   tasks?: Task[];
   history?: HistoryMessage[];
-  pendingTaskAction?: TaskInput | null;
+  /** Los ítems de la propuesta que el usuario todavía no confirmó ni descartó. */
+  pendingTaskActions?: unknown;
+  /** Formato anterior (un solo ítem). Se sigue aceptando. */
+  pendingTaskAction?: unknown;
 };
+
+/** Cuántos ítems de una propuesta pendiente entran al prompt. */
+const MAX_PENDING_ITEMS = 25;
+
+/**
+ * Lo que el cliente dice que está pendiente va al prompt, así que se lo trata como entrada
+ * no confiable: cada ítem pasa por el mismo normalizador que los que propone Milo.
+ */
+function readPending(body: MiloChatRequest, now: Date): TaskInput[] {
+  const raw = Array.isArray(body.pendingTaskActions)
+    ? body.pendingTaskActions
+    : body.pendingTaskAction
+      ? [body.pendingTaskAction]
+      : [];
+  return raw
+    .slice(0, MAX_PENDING_ITEMS)
+    .map((item) => normalizeTaskAction(item, now))
+    .filter((item): item is TaskInput => item !== null);
+}
 
 export async function POST(request: Request) {
   let userId: string;
@@ -61,34 +88,62 @@ export async function POST(request: Request) {
   // "Today" is the user's. On UTC the model was told tomorrow's date for hours
   // every evening, and every relative date it resolved ("mañana", "el jueves")
   // came out a day late.
-  const now = getZonedNow(await resolveUserTimeZone(userId));
+  const timeZone = await resolveUserTimeZone(userId);
+  const now = getZonedNow(timeZone);
 
-  const { static: staticContext, dynamic: dynamicContext } = buildTaskPromptParts({
-    tasks,
-    pendingTaskAction: body.pendingTaskAction ?? null,
-    canCreateTasks,
-    userMemory,
-    now
-  });
+  const pendingTaskActions = readPending(body, now);
+  const isPro = plan === "pro";
+  const tier = isPro ? "pro" : "standard";
+
+  const promptFor = (mode: PromptMode) =>
+    buildTaskPromptParts({ tasks, pendingTaskActions, canCreateTasks, userMemory, now, mode });
 
   try {
-    const { content } = await chatWithMilo({
-      message,
-      contextStatic: staticContext,
-      context: dynamicContext,
-      history,
-      isPro: plan === "pro"
-    });
-    const parsed = parseTaskActions(content, now);
+    let text = "";
+    let taskActions: TaskInput[] = [];
+    let proposal: WeekProposal | null = null;
+    let viaTools = false;
 
-    // This used to swallow every malformed block, so "Milo no me creo las
-    // tareas" had no explanation anywhere. Now the reason is in the logs.
-    if (parsed.error) {
-      console.error(
-        `[milo] user=${userId} task block present but unusable: ${parsed.error}`
-      );
-    } else if (parsed.partial) {
-      console.warn(`[milo] user=${userId} reply was truncated, recovered ${parsed.taskActions.length} task(s)`);
+    // Milo llama tools cuando alguien puede crear y algún proveedor las soporta. Sin eso
+    // (o si todos rechazan la request) se usa el bloque TASKS_ACTION de siempre.
+    if (canCreateTasks && chainSupportsTools(tier)) {
+      const { static: contextStatic, dynamic: context } = promptFor("tools");
+      try {
+        const result = await runMiloAgent({
+          message,
+          contextStatic,
+          context,
+          history,
+          isPro,
+          tools: createToolContext(userId, getTodayInTimeZone(timeZone), now)
+        });
+        text = result.text;
+        taskActions = result.taskActions;
+        proposal = result.proposal;
+        viaTools = true;
+        console.info(
+          `[milo] user=${userId} tools=[${result.toolsUsed.join(", ")}] rounds=${result.rounds} via=${result.provider}`
+        );
+      } catch (error) {
+        if (!toolsNotSupported(error)) throw error;
+        console.warn(`[milo] user=${userId} tools rejected by every provider, using the TASKS_ACTION fallback`);
+      }
+    }
+
+    if (!viaTools) {
+      const { static: contextStatic, dynamic: context } = promptFor(canCreateTasks ? "legacy" : "tools");
+      const { content } = await chatWithMilo({ message, contextStatic, context, history, isPro });
+      const parsed = parseTaskActions(content, now);
+
+      // This used to swallow every malformed block, so "Milo no me creo las
+      // tareas" had no explanation anywhere. Now the reason is in the logs.
+      if (parsed.error) {
+        console.error(`[milo] user=${userId} task block present but unusable: ${parsed.error}`);
+      } else if (parsed.partial) {
+        console.warn(`[milo] user=${userId} reply was truncated, recovered ${parsed.taskActions.length} task(s)`);
+      }
+      text = parsed.text;
+      taskActions = parsed.taskActions;
     }
 
     // This used to be a bare `void`, which runs in development and dies
@@ -101,13 +156,14 @@ export async function POST(request: Request) {
       updateMemoryInBackground(userId, userMemory, [
         ...history,
         { role: "user", content: message },
-        { role: "assistant", content: parsed.text }
+        { role: "assistant", content: text }
       ])
     );
 
     return NextResponse.json({
-      response: parsed.text,
-      taskActions: canCreateTasks && parsed.taskActions.length > 0 ? parsed.taskActions : null
+      response: text,
+      taskActions: canCreateTasks && taskActions.length > 0 ? taskActions : null,
+      proposal: canCreateTasks ? proposal : null
     });
   } catch (error) {
     // Groq's plan allows 200k tokens per day for the whole account, so a budget

@@ -46,7 +46,7 @@ describe("buildTaskPromptParts: the static half", () => {
     expect(a.static).toBe(b.static);
   });
 
-  it("changes across days only in the one date the example needs", () => {
+  it("legacy: changes across days only in the one date the example needs", () => {
     // A deliberate trade-off, pinned so nobody "fixes" it by accident.
     //
     // The example inside the rules shows a real date rather than a
@@ -58,10 +58,11 @@ describe("buildTaskPromptParts: the static half", () => {
     // The important part is that nothing ELSE moves. If a second date or any
     // other per-turn detail ever lands in here, the cache starts missing on
     // every request and the split becomes decoration.
-    const today = buildTaskPromptParts({ canCreateTasks: true, now: NOW }).static;
+    const today = buildTaskPromptParts({ canCreateTasks: true, now: NOW, mode: "legacy" }).static;
     const tomorrow = buildTaskPromptParts({
       canCreateTasks: true,
-      now: new Date("2026-03-12T09:00:00.000Z")
+      now: new Date("2026-03-12T09:00:00.000Z"),
+      mode: "legacy"
     }).static;
 
     const datesIn = (text: string) => text.match(/\d{4}-\d{2}-\d{2}/g) ?? [];
@@ -92,9 +93,16 @@ describe("buildTaskPromptParts: the static half", () => {
     const free = buildTaskPromptParts({ canCreateTasks: false, now: NOW }).static;
 
     expect(paid).not.toBe(free);
-    expect(paid).toContain("TASKS_ACTION");
-    expect(free).not.toContain("TASKS_ACTION:[{");
+    expect(paid).toContain("create_items");
+    expect(free).not.toContain("create_items");
+    expect(free).not.toContain("plan_week");
     expect(free).toContain("plan Free");
+
+    const legacyPaid = buildTaskPromptParts({ canCreateTasks: true, now: NOW, mode: "legacy" }).static;
+    const legacyFree = buildTaskPromptParts({ canCreateTasks: false, now: NOW, mode: "legacy" }).static;
+    expect(legacyPaid).toContain("TASKS_ACTION");
+    expect(legacyFree).not.toContain("TASKS_ACTION:[{");
+    expect(legacyFree).toContain("plan Free");
   });
 });
 
@@ -227,14 +235,14 @@ describe("buildTaskContext: the joined form", () => {
     });
 
     expect(joined).toContain("Voseo rioplatense");
-    expect(joined).toContain("TASKS_ACTION");
+    expect(joined).toContain("create_items");
     expect(joined).toContain("Fecha de hoy: 2026-03-11");
     expect(joined).toContain("Llamar al banco");
   });
 });
 
-describe("buildTaskPromptParts: recurrencias", () => {
-  const paid = () => buildTaskPromptParts({ canCreateTasks: true, now: NOW }).static;
+describe("buildTaskPromptParts: recurrencias (camino legacy)", () => {
+  const paid = () => buildTaskPromptParts({ canCreateTasks: true, now: NOW, mode: "legacy" }).static;
 
   it("le pide UNA tarea con repeat y ya no una por ocurrencia", () => {
     const rules = paid();
@@ -268,7 +276,7 @@ describe("buildTaskPromptParts: recurrencias", () => {
   });
 
   it("el usuario Free no recibe nada de esto", () => {
-    const free = buildTaskPromptParts({ canCreateTasks: false, now: NOW }).static;
+    const free = buildTaskPromptParts({ canCreateTasks: false, now: NOW, mode: "legacy" }).static;
     expect(free).not.toContain('"repeat"');
     expect(free).not.toContain("TASKS_ACTION:[{");
   });
@@ -337,5 +345,95 @@ describe("buildTaskPromptParts: hoy en la zona del usuario", () => {
       if (original === undefined) delete process.env.TZ;
       else process.env.TZ = original;
     }
+  });
+});
+
+describe("buildTaskPromptParts: modo tools", () => {
+  const rules = () => buildTaskPromptParts({ canCreateTasks: true, now: NOW }).static;
+
+  it("no sabe nada del formato TASKS_ACTION", () => {
+    const { static: staticPart, dynamic } = buildTaskPromptParts({
+      canCreateTasks: true,
+      tasks: [task()],
+      pendingTaskActions: [{ title: "X", category: "g", description: "", priority: "medium", estimateMin: 30, dueDate: "2026-03-12", kind: "task" }],
+      now: NOW
+    });
+    expect(staticPart).not.toContain("TASKS_ACTION");
+    expect(dynamic).not.toContain("TASKS_ACTION");
+    expect(staticPart).not.toMatch(/bloque/i);
+  });
+
+  it("dice cuándo usar cada tool", () => {
+    const text = rules();
+    for (const name of ["create_items", "plan_week", "get_schedule", "ask_user"]) expect(text).toContain(name);
+    expect(text).toMatch(/organizame la semana/);
+    expect(text).toMatch(/¿qué tengo el jueves\?/);
+  });
+
+  it("pide TODOS los ítems del mensaje en una sola llamada", () => {
+    expect(rules()).toMatch(/TODOS los ítems del mensaje en UNA sola llamada/);
+  });
+
+  it("recurrentes: un ítem con repeat, con los ejemplos que fijan el comportamiento", () => {
+    const text = rules();
+    expect(text).toMatch(/UN ítem con repeat, nunca uno por cada vez/);
+    expect(text).toContain("weekdays [3,6]");
+    expect(text).toContain("monthDay 5");
+  });
+
+  it("pregunta solo lo necesario: ask_user para lo imprescindible, default para fecha u hora", () => {
+    const text = rules();
+    expect(text).toMatch(/IMPRESCINDIBLE/);
+    expect(text).toMatch(/No preguntes fecha u hora sueltas/);
+  });
+
+  it("propone y no afirma que creó", () => {
+    expect(rules()).toMatch(/NUNCA digas "he creado"/);
+  });
+
+  it("los cambios a una propuesta vuelven a llamar la misma tool con la lista completa", () => {
+    expect(rules()).toMatch(/lista COMPLETA/);
+    const { dynamic } = buildTaskPromptParts({
+      canCreateTasks: true,
+      pendingTaskActions: [
+        { title: "Informe", category: "g", description: "", priority: "medium", estimateMin: 90, dueDate: "2026-03-13", kind: "task" },
+        { title: "Gimnasio", category: "g", description: "", priority: "medium", estimateMin: 60, dueDate: "2026-03-14", kind: "task", repeat: { freq: "weekly", interval: 1, weekdays: [3] } }
+      ],
+      now: NOW
+    });
+    expect(dynamic).toContain("Propuesta pendiente de confirmación");
+    expect(dynamic).toContain("- Informe — 2026-03-13, 90 min, task");
+    expect(dynamic).toContain("- Gimnasio — 2026-03-14, 60 min, task, se repite");
+    expect(dynamic).toMatch(/COMPLETA/);
+  });
+
+  it("sin propuesta pendiente no hay sección", () => {
+    expect(buildTaskPromptParts({ canCreateTasks: true, now: NOW }).dynamic).not.toContain("Propuesta pendiente");
+  });
+
+  it("el bloque fijo es idéntico todos los días y entre usuarios (no lleva ninguna fecha)", () => {
+    const a = buildTaskPromptParts({ canCreateTasks: true, now: NOW }).static;
+    const b = buildTaskPromptParts({
+      canCreateTasks: true,
+      tasks: [task({ title: "Otra" })],
+      userMemory: "x",
+      now: new Date("2026-07-01T09:00:00.000Z")
+    }).static;
+    expect(a).toBe(b);
+    expect(a).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("la tabla de fechas trae el lunes que viene para plan_week", () => {
+    // NOW es miércoles 2026-03-11: el lunes que viene es el 16.
+    const { dynamic } = buildTaskPromptParts({ canCreateTasks: true, now: NOW });
+    expect(dynamic).toContain('"el lunes que viene" (primer día de la semana que viene) = 2026-03-16');
+    const monday = buildTaskPromptParts({ canCreateTasks: true, now: new Date("2026-03-09T10:00:00.000Z") }).dynamic;
+    expect(monday).toContain("= 2026-03-16");
+  });
+
+  it("el usuario Free no recibe ninguna tool ni promesa de planificar", () => {
+    const free = buildTaskPromptParts({ canCreateTasks: false, now: NOW }).static;
+    for (const name of ["create_items", "plan_week", "get_schedule", "ask_user"]) expect(free).not.toContain(name);
+    expect(free).toContain("/plans");
   });
 });

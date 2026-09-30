@@ -23,18 +23,19 @@ type MiloChatParams = {
 
 const DEFAULT_MAX_TOKENS = 1200;
 
-export async function chatWithMilo({
+/**
+ * The messages for one chat turn: the stable rules first (so a provider can cache them),
+ * then the per-turn context, the history, and the user's message — with web results
+ * appended to it when it reads like a factual question. Shared by the text path and the
+ * tool path so both send Milo exactly the same conversation.
+ */
+export async function buildChatMessages({
   message,
   context = "",
   contextStatic = "",
   history = [],
-  timeoutMs = 30000,
-  isPro = false,
-  tier,
-  maxTokens
-}: MiloChatParams) {
-  const requestedTier: ModelTier = tier ?? (isPro ? "pro" : "standard");
-
+  isPro = false
+}: Pick<MiloChatParams, "message" | "context" | "contextStatic" | "history" | "isPro">): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [
     ...(contextStatic ? [{ role: "system" as const, content: contextStatic }] : []),
     ...(context ? [{ role: "system" as const, content: context }] : []),
@@ -51,6 +52,21 @@ export async function chatWithMilo({
       };
     }
   }
+  return messages;
+}
+
+export async function chatWithMilo({
+  message,
+  context = "",
+  contextStatic = "",
+  history = [],
+  timeoutMs = 30000,
+  isPro = false,
+  tier,
+  maxTokens
+}: MiloChatParams) {
+  const requestedTier: ModelTier = tier ?? (isPro ? "pro" : "standard");
+  const messages = await buildChatMessages({ message, context, contextStatic, history, isPro });
 
   const response = await complete({
     messages,
