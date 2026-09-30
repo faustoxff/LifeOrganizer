@@ -26,6 +26,11 @@ export type SchedulerSubtask = {
   done: boolean;
   /** Minutos ya trabajados. Se descuentan de lo que falta. */
   actualMin?: number;
+  /**
+   * No se agenda antes de esta fecha. Es lo que hace "saltear": la subtarea se
+   * difiere sin tocar la disponibilidad de nadie.
+   */
+  notBefore?: string | null;
 };
 
 export type SchedulerProject = {
@@ -206,6 +211,8 @@ type Node = {
   projectIdx: number;
   /** Índices de las dependencias todavía sin hacer. */
   deps: number[];
+  /** Primer día en que se puede agendar, o null. */
+  notBefore: string | null;
   /** Minutos que faltan al empezar (0 si está hecha). */
   need: number;
   slack: number;
@@ -228,7 +235,9 @@ function assertDate(value: string, label: string): void {
 }
 
 /** Busca un ciclo entre las dependencias de un proyecto. */
-function findCycle(subtasks: SchedulerSubtask[]): string[] | null {
+export function findDependencyCycle(
+  subtasks: ReadonlyArray<{ id: string; dependsOn: readonly string[] }>
+): string[] | null {
   const byId = new Map(subtasks.map((s) => [s.id, s]));
   const state = new Map<string, 0 | 1 | 2>(); // 1 = en la pila, 2 = terminado
   const stack: string[] = [];
@@ -285,6 +294,9 @@ function validate(input: ScheduleInput): void {
       if (!Number.isInteger(subtask.estimateMin) || subtask.estimateMin < 1) {
         throw new SchedulerError("INVALID_INPUT", `estimateMin of ${subtask.id} must be a positive integer`);
       }
+      if (subtask.notBefore !== undefined && subtask.notBefore !== null) {
+        assertDate(subtask.notBefore, `notBefore of ${subtask.id}`);
+      }
       for (const dep of subtask.dependsOn) {
         if (!ids.has(dep)) {
           throw new SchedulerError(
@@ -295,7 +307,7 @@ function validate(input: ScheduleInput): void {
       }
     }
 
-    const cycle = findCycle(project.subtasks);
+    const cycle = findDependencyCycle(project.subtasks);
     if (cycle) throw new SchedulerCycleError(project.id, cycle);
   }
 }
@@ -338,6 +350,7 @@ function buildModel(input: ScheduleInput, change?: { extraPerDay?: number; deadl
         id: subtask.id,
         projectIdx,
         deps: [],
+        notBefore: subtask.notBefore ?? null,
         need: subtask.done ? 0 : Math.max(1, effective - worked),
         slack: 0
       });
@@ -518,6 +531,7 @@ function fill(model: Model, pins: RawSession[] = []): CoreResult {
         if (remaining[index] <= 0) return;
         if (projects[node.projectIdx].deadline < date) return;
         if (usedDays[index].has(date)) return;
+        if (node.notBefore !== null && date < node.notBefore) return;
         const ready = node.deps.every((dep) => remaining[dep] <= 0 && (lastDate[dep] as string) < date);
         if (ready) candidates.push(index);
       });
@@ -762,7 +776,12 @@ function pinnableSessions(model: Model, previous: Session[]): RawSession[] {
     .filter((s) => {
       if (s.nodeIndex < 0) return false;
       const node = nodes[s.nodeIndex];
-      return node.need > 0 && projects[node.projectIdx].id === s.projectId && s.date <= projects[node.projectIdx].deadline;
+      return (
+        node.need > 0 &&
+        projects[node.projectIdx].id === s.projectId &&
+        s.date <= projects[node.projectIdx].deadline &&
+        (node.notBefore === null || s.date >= node.notBefore)
+      );
     })
     .map(({ nodeIndex, date, minutes }) => ({ nodeIndex, date, minutes }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : nodes[a.nodeIndex].order - nodes[b.nodeIndex].order));

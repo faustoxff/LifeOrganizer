@@ -5,6 +5,7 @@ import { addDays, daysBetween } from "@/lib/recurrence";
 import {
   effectiveMinutes,
   replan,
+  findDependencyCycle,
   schedule,
   SchedulerCycleError,
   SchedulerError,
@@ -37,6 +38,13 @@ const minutesOn = (sessions: Session[], date: string) =>
   sessions.filter((s) => s.date === date).reduce((sum, s) => sum + s.minutes, 0);
 const of = (sessions: Session[], subtaskId: string) => sessions.filter((s) => s.subtaskId === subtaskId);
 const dates = (sessions: Session[], subtaskId: string) => of(sessions, subtaskId).map((s) => s.date);
+
+describe("findDependencyCycle", () => {
+  it("encuentra un ciclo y devuelve null si no hay", () => {
+    expect(findDependencyCycle([{ id: "a", dependsOn: ["b"] }, { id: "b", dependsOn: [] }])).toBeNull();
+    expect(findDependencyCycle([{ id: "a", dependsOn: ["b"] }, { id: "b", dependsOn: ["a"] }])).toEqual(expect.arrayContaining(["a", "b"]));
+  });
+});
 
 describe("helpers", () => {
   it("la duración efectiva es ceil(estimado * inflación), sin errores de coma flotante", () => {
@@ -448,6 +456,39 @@ describe("deadlines extremos", () => {
   it("nunca agenda después del deadline", () => {
     const out = schedule(input([project("p", WED, [sub("a", 300)])]));
     expect(out.sessions.every((s) => s.date <= WED)).toBe(true);
+  });
+});
+
+describe("notBefore (saltear = diferir)", () => {
+  it("no agenda una subtarea antes de su fecha", () => {
+    const out = schedule(input([project("p", "2026-10-12", [sub("a", 60, { notBefore: WED }), sub("b", 60)])]));
+    expect(dates(out.sessions, "a")).toEqual([WED]);
+    expect(dates(out.sessions, "b")).toEqual([MON]);
+  });
+
+  it("los demás ocupan el lugar que deja y su sucesor espera", () => {
+    const out = schedule(input([
+      project("p", "2026-10-12", [sub("a", 60, { notBefore: TUE }), sub("b", 60, { dependsOn: ["a"] })])
+    ]));
+    expect(dates(out.sessions, "a")).toEqual([TUE]);
+    expect(dates(out.sessions, "b")).toEqual([WED]);
+  });
+
+  it("si el deadline llega antes de la fecha, no entra", () => {
+    const out = schedule(input([project("p", TUE, [sub("a", 60, { notBefore: WED })])]));
+    expect(out.perProject.p.feasible).toBe(false);
+    expect(out.perProject.p.shortfallMin).toBe(60);
+  });
+
+  it("una fecha inválida es un error explícito", () => {
+    expect(() => schedule(input([project("p", "2026-10-12", [sub("a", 60, { notBefore: "mañana" })])]))).toThrow(SchedulerError);
+  });
+
+  it("replan no conserva una sesión anterior a su nuevo notBefore", () => {
+    const first = schedule(input([project("p", "2026-10-12", [sub("a", 60)])]));
+    expect(dates(first.sessions, "a")).toEqual([MON]);
+    const out = replan(input([project("p", "2026-10-12", [sub("a", 60, { notBefore: TUE })])]), first);
+    expect(dates(out.sessions, "a")).toEqual([TUE]);
   });
 });
 
