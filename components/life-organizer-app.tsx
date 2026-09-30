@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BarChart3, Bell, LogOut, Zap, X, ArrowUpRight, ListChecks, MessageCircle, PanelLeft } from "lucide-react";
+import { BarChart3, Bell, Clock, LogOut, Zap, X, ArrowUpRight, ListChecks, MessageCircle, PanelLeft } from "lucide-react";
+import { AvailabilityDialog } from "@/components/availability-dialog";
 import { CalendarView } from "@/components/calendar-view";
 import { FocusMode } from "@/components/focus-mode";
 import { GemUnlock } from "@/components/gem-unlock";
@@ -12,6 +13,7 @@ import { MiloChat } from "@/components/milo-chat";
 import { PlanZapIcon } from "@/components/plan-zap-icon";
 import { ScopeDialog } from "@/components/scope-dialog";
 import { getUserDisplayName } from "@/lib/auth";
+import { DEFAULT_AVAILABILITY, parseAvailability, type Availability } from "@/lib/availability";
 import { TaskForm } from "@/components/task-form";
 import { Button } from "@/components/ui/button";
 import { TextAnimate } from "@/components/ui/text-animate";
@@ -54,6 +56,10 @@ export function LifeOrganizerApp() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // How much time per day the user can give their pending work. `configured`
+  // false means they never set it: the first visit shows the onboarding step.
+  const [availability, setAvailability] = useState<{ values: Availability; configured: boolean } | null>(null);
+  const [availabilityDialog, setAvailabilityDialog] = useState<"onboarding" | "settings" | null>(null);
   // Editing or deleting one occurrence of a repeating task asks for the scope
   // first; the action waits here until the user picks.
   const [scopePrompt, setScopePrompt] = useState<
@@ -134,6 +140,43 @@ export function LifeOrganizerApp() {
     void load();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadAvailability() {
+      try {
+        const res = await fetch("/api/settings/availability");
+        if (!res.ok) return;
+        const data = (await res.json()) as { availability?: unknown; configured?: unknown };
+        const values = parseAvailability(data.availability);
+        if (!active || !values) return;
+        const configured = data.configured === true;
+        setAvailability({ values, configured });
+        if (!configured) setAvailabilityDialog("onboarding");
+      } catch {
+        /* the app works without it; the dialog just does not show */
+      }
+    }
+    void loadAvailability();
+    return () => { active = false; };
+  }, []);
+
+  async function handleSaveAvailability(values: Availability) {
+    try {
+      const res = await fetch("/api/settings/availability", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ availability: values })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setAvailability({ values, configured: true });
+      setStorageError("");
+      return true;
+    } catch (err) {
+      setStorageError(getErrorMessage(err, copy.errors.unexpected));
+      return false;
+    }
+  }
 
   // Several rows can change at once (a series was cut and another created), so
   // those operations reload instead of patching local state row by row.
@@ -535,6 +578,15 @@ export function LifeOrganizerApp() {
             </button>
           )}
 
+          <button
+            onClick={() => setAvailabilityDialog("settings")}
+            className="flex items-center gap-1.5 rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label={copy.availability.open}
+            title={copy.availability.open}
+          >
+            <Clock className="h-4 w-4" />
+          </button>
+
           {plan === "pro" && (
             <Link
               href="/stats"
@@ -695,6 +747,15 @@ export function LifeOrganizerApp() {
           </button>
         ))}
       </nav>
+
+      {availabilityDialog && (
+        <AvailabilityDialog
+          mode={availabilityDialog}
+          initial={availability?.values ?? DEFAULT_AVAILABILITY}
+          onSave={handleSaveAvailability}
+          onClose={() => setAvailabilityDialog(null)}
+        />
+      )}
 
       {scopePrompt && (
         <ScopeDialog

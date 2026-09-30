@@ -19,6 +19,12 @@ export function weekdayShortName(weekday: number, language: AppLanguage): string
     .replace(/\.$/, "");
 }
 
+/** Nombre completo de un día de la semana (0 = domingo) en el idioma de la app. */
+export function weekdayLongName(weekday: number, language: AppLanguage): string {
+  const date = new Date(Date.UTC(2023, 0, 1 + weekday));
+  return new Intl.DateTimeFormat(getDateLocale(language), { weekday: "long", timeZone: "UTC" }).format(date);
+}
+
 /**
  * Una recurrencia en una línea, para mostrar en la lista y en las propuestas de
  * Milo: "Mié, Sáb", "Cada 2 semanas · Lun", "Todos los meses · 5".

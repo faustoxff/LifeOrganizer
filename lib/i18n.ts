@@ -141,6 +141,15 @@ export const copy = {
       repeatMonths: "months",
       repeatOnDays: "On"
     },
+    availability: {
+      title: "Daily availability",
+      question: "How much time per day can you give to your pending tasks?",
+      hint: "Your projects will only be planned within these hours. You can change this any time.",
+      save: "Save",
+      useDefaults: "Use the suggested hours",
+      open: "Availability",
+      off: "Off"
+    },
     scope: {
       editTitle: "Edit a repeating task",
       deleteTitle: "Delete a repeating task",
@@ -358,6 +367,15 @@ export const copy = {
       repeatMonths: "meses",
       repeatOnDays: "Los"
     },
+    availability: {
+      title: "Disponibilidad diaria",
+      question: "¿Cuánto tiempo por día podés dedicarle a tus pendientes?",
+      hint: "Tus proyectos solo se van a planificar dentro de estas horas. Podés cambiarlo cuando quieras.",
+      save: "Guardar",
+      useDefaults: "Usar los horarios sugeridos",
+      open: "Disponibilidad",
+      off: "Sin tiempo"
+    },
     scope: {
       editTitle: "Editar tarea repetitiva",
       deleteTitle: "Borrar tarea repetitiva",
@@ -574,6 +592,15 @@ export const copy = {
       repeatMonths: "meses",
       repeatOnDays: "Em"
     },
+    availability: {
+      title: "Disponibilidade diária",
+      question: "Quanto tempo por dia você pode dedicar às suas pendências?",
+      hint: "Seus projetos só serão planejados dentro desses horários. Você pode mudar isso quando quiser.",
+      save: "Salvar",
+      useDefaults: "Usar os horários sugeridos",
+      open: "Disponibilidade",
+      off: "Sem tempo"
+    },
     scope: {
       editTitle: "Editar tarefa recorrente",
       deleteTitle: "Excluir tarefa recorrente",
@@ -692,6 +719,15 @@ export const copy = {
       repeatDays: "jours",
       repeatMonths: "mois",
       repeatOnDays: "Le"
+    },
+    availability: {
+      title: "Disponibilité quotidienne",
+      question: "Combien de temps par jour pouvez-vous consacrer à vos tâches en attente ?",
+      hint: "Vos projets ne seront planifiés que dans ces créneaux. Vous pouvez le modifier à tout moment.",
+      save: "Enregistrer",
+      useDefaults: "Utiliser les horaires suggérés",
+      open: "Disponibilité",
+      off: "Aucun"
     },
     scope: {
       editTitle: "Modifier une tâche récurrente",
@@ -812,6 +848,15 @@ export const copy = {
       repeatMonths: "Monate",
       repeatOnDays: "An"
     },
+    availability: {
+      title: "Tägliche Verfügbarkeit",
+      question: "Wie viel Zeit pro Tag kannst du für deine offenen Aufgaben einplanen?",
+      hint: "Deine Projekte werden nur innerhalb dieser Zeiten geplant. Du kannst das jederzeit ändern.",
+      save: "Speichern",
+      useDefaults: "Vorgeschlagene Zeiten verwenden",
+      open: "Verfügbarkeit",
+      off: "Aus"
+    },
     scope: {
       editTitle: "Wiederkehrende Aufgabe bearbeiten",
       deleteTitle: "Wiederkehrende Aufgabe löschen",
@@ -930,6 +975,15 @@ export const copy = {
       repeatDays: "giorni",
       repeatMonths: "mesi",
       repeatOnDays: "Il"
+    },
+    availability: {
+      title: "Disponibilità giornaliera",
+      question: "Quanto tempo al giorno puoi dedicare alle tue attività in sospeso?",
+      hint: "I tuoi progetti saranno pianificati solo in queste ore. Puoi cambiarlo quando vuoi.",
+      save: "Salva",
+      useDefaults: "Usa gli orari suggeriti",
+      open: "Disponibilità",
+      off: "Nessuno"
     },
     scope: {
       editTitle: "Modifica attività ricorrente",
@@ -1050,6 +1104,15 @@ export const copy = {
       repeatMonths: "个月",
       repeatOnDays: "在"
     },
+    availability: {
+      title: "每日可用时间",
+      question: "你每天能为待办事项投入多少时间？",
+      hint: "你的项目只会安排在这些时间内。你可以随时修改。",
+      save: "保存",
+      useDefaults: "使用建议时间",
+      open: "可用时间",
+      off: "无"
+    },
     scope: {
       editTitle: "编辑重复任务",
       deleteTitle: "删除重复任务",
@@ -1168,6 +1231,15 @@ export const copy = {
       repeatDays: "日",
       repeatMonths: "か月",
       repeatOnDays: "曜日"
+    },
+    availability: {
+      title: "1日の作業可能時間",
+      question: "未完了のタスクに、1日どれくらい時間を使えますか？",
+      hint: "プロジェクトはこの時間内でのみ計画されます。いつでも変更できます。",
+      save: "保存",
+      useDefaults: "おすすめの時間を使う",
+      open: "作業可能時間",
+      off: "なし"
     },
     scope: {
       editTitle: "繰り返しタスクを編集",
@@ -1288,6 +1360,15 @@ export const copy = {
       repeatMonths: "개월",
       repeatOnDays: "요일"
     },
+    availability: {
+      title: "하루 가용 시간",
+      question: "남은 작업에 하루에 얼마나 시간을 쓸 수 있나요?",
+      hint: "프로젝트는 이 시간 안에서만 계획됩니다. 언제든 바꿀 수 있어요.",
+      save: "저장",
+      useDefaults: "추천 시간 사용",
+      open: "가용 시간",
+      off: "없음"
+    },
     scope: {
       editTitle: "반복 작업 수정",
       deleteTitle: "반복 작업 삭제",
@@ -1406,6 +1487,15 @@ export const copy = {
       repeatDays: "дн.",
       repeatMonths: "мес.",
       repeatOnDays: "По"
+    },
+    availability: {
+      title: "Доступное время в день",
+      question: "Сколько времени в день вы можете уделять своим задачам?",
+      hint: "Проекты будут планироваться только в эти часы. Это можно изменить в любой момент.",
+      save: "Сохранить",
+      useDefaults: "Использовать рекомендуемое время",
+      open: "Доступное время",
+      off: "Нет"
     },
     scope: {
       editTitle: "Изменить повторяющуюся задачу",
@@ -1526,6 +1616,15 @@ export const copy = {
       repeatMonths: "ay",
       repeatOnDays: "Günler"
     },
+    availability: {
+      title: "Günlük müsaitlik",
+      question: "Bekleyen görevlerine günde ne kadar zaman ayırabilirsin?",
+      hint: "Projelerin yalnızca bu saatler içinde planlanır. İstediğin zaman değiştirebilirsin.",
+      save: "Kaydet",
+      useDefaults: "Önerilen saatleri kullan",
+      open: "Müsaitlik",
+      off: "Yok"
+    },
     scope: {
       editTitle: "Tekrarlayan görevi düzenle",
       deleteTitle: "Tekrarlayan görevi sil",
@@ -1645,6 +1744,15 @@ export const copy = {
       repeatMonths: "maanden",
       repeatOnDays: "Op"
     },
+    availability: {
+      title: "Dagelijkse beschikbaarheid",
+      question: "Hoeveel tijd per dag kun je aan je openstaande taken besteden?",
+      hint: "Je projecten worden alleen binnen deze uren gepland. Je kunt dit altijd aanpassen.",
+      save: "Opslaan",
+      useDefaults: "Voorgestelde uren gebruiken",
+      open: "Beschikbaarheid",
+      off: "Uit"
+    },
     scope: {
       editTitle: "Terugkerende taak bewerken",
       deleteTitle: "Terugkerende taak verwijderen",
@@ -1763,6 +1871,15 @@ export const copy = {
       repeatDays: "dni",
       repeatMonths: "mies.",
       repeatOnDays: "W"
+    },
+    availability: {
+      title: "Dzienna dostępność",
+      question: "Ile czasu dziennie możesz poświęcić na oczekujące zadania?",
+      hint: "Twoje projekty będą planowane tylko w tych godzinach. Możesz to zmienić w każdej chwili.",
+      save: "Zapisz",
+      useDefaults: "Użyj sugerowanych godzin",
+      open: "Dostępność",
+      off: "Brak"
     },
     scope: {
       editTitle: "Edytuj zadanie cykliczne",

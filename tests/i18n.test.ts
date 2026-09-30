@@ -33,7 +33,9 @@ describe("i18n", () => {
     "taskForm.repeatOptions.monthly", "taskForm.repeatEvery", "taskForm.repeatWeeks",
     "taskForm.repeatOnDays", "taskForm.repeatDays", "taskForm.repeatMonths", "scope.editTitle", "scope.deleteTitle", "scope.editQuestion",
     "scope.deleteQuestion", "scope.thisOnly", "scope.thisAndFollowing",
-    "calendar.todayReminders", "taskList.repeats"
+    "calendar.todayReminders", "taskList.repeats",
+    "availability.title", "availability.question", "availability.hint", "availability.save",
+    "availability.useDefaults", "availability.open", "availability.off"
   ];
 
   it("el texto nuevo existe y no está vacío en los 13 idiomas", () => {
