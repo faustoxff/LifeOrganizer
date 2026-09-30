@@ -98,6 +98,28 @@ describe("parseTaskPayload", () => {
   });
 });
 
+describe("dailyCapMin", () => {
+  it("un proyecto lo conserva", () => {
+    expect(ok({ ...valid, kind: "project", dailyCapMin: 90 }).task.dailyCapMin).toBe(90);
+  });
+
+  it("en una tarea o recordatorio no significa nada y se descarta", () => {
+    expect(ok({ ...valid, dailyCapMin: 90 }).task).not.toHaveProperty("dailyCapMin");
+    expect(ok({ ...valid, kind: "reminder", dailyCapMin: 90 }).task).not.toHaveProperty("dailyCapMin");
+  });
+
+  it("null o ausente quita el tope", () => {
+    expect(ok({ ...valid, kind: "project", dailyCapMin: null }).task).not.toHaveProperty("dailyCapMin");
+    expect(ok({ ...valid, kind: "project" }).task).not.toHaveProperty("dailyCapMin");
+  });
+
+  it("rechaza valores que no son un tope posible", () => {
+    for (const bad of [0, -5, 1.5, 1441, "60", NaN]) {
+      expect(error({ ...valid, kind: "project", dailyCapMin: bad })).toBe("Invalid daily cap");
+    }
+  });
+});
+
 describe("parseScope", () => {
   it("solo 'following' cambia el alcance; todo lo demás es 'esta'", () => {
     expect(parseScope("following")).toBe("following");

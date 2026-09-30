@@ -84,6 +84,15 @@ export function parseTaskPayload(value: unknown): TaskPayloadResult {
     time = t.time;
   }
 
+  let dailyCapMin: number | undefined;
+  if (t.dailyCapMin !== undefined && t.dailyCapMin !== null) {
+    if (typeof t.dailyCapMin !== "number" || !Number.isInteger(t.dailyCapMin) || t.dailyCapMin < 1 || t.dailyCapMin > 1440) {
+      return fail("Invalid daily cap");
+    }
+    // Solo un proyecto se reparte en días; en cualquier otro tipo no significa nada.
+    if (kind === "project") dailyCapMin = t.dailyCapMin;
+  }
+
   let repeat: RepeatSpec | undefined;
   if (t.repeat !== undefined && t.repeat !== null) {
     const normalized = normalizeRepeat(t.repeat);
@@ -107,6 +116,7 @@ export function parseTaskPayload(value: unknown): TaskPayloadResult {
     status: t.done ? "done" : "pending",
     kind: kind as TaskKind,
     ...(time ? { time } : {}),
+    ...(dailyCapMin ? { dailyCapMin } : {}),
     ...(t.steps !== undefined ? { steps: t.steps as Task["steps"] } : {})
   };
 

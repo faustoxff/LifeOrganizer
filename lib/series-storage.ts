@@ -91,7 +91,7 @@ export async function loadSeriesOccurrences(userId: string, seriesId: string): P
   const rows = await sql`
     SELECT id, user_id, title, category, description, priority, estimate_min, due_date,
            done, completed_at, steps, kind, remind_at, series_id,
-           occurrence_date::text AS occurrence_date, status
+           occurrence_date::text AS occurrence_date, status, daily_cap_min
     FROM tasks
     WHERE user_id = ${userId} AND series_id = ${seriesId}
     ORDER BY occurrence_date ASC
@@ -143,7 +143,7 @@ const occurrenceStore: OccurrenceStore & SeriesEditStore = {
 
   async getOccurrence(userId, taskId) {
     const rows = await sql`
-      SELECT series_id, occurrence_date::text AS occurrence_date, status
+      SELECT series_id, occurrence_date::text AS occurrence_date, status, daily_cap_min
       FROM tasks
       WHERE id = ${taskId} AND user_id = ${userId} AND series_id IS NOT NULL
     `;

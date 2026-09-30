@@ -28,13 +28,14 @@ type TaskRow = {
   series_id: string | null;
   occurrence_date: string | null;
   status: TaskStatus;
+  daily_cap_min: number | null;
 };
 
 export async function loadTasks(userId: string): Promise<Task[]> {
   const rows = await sql`
     SELECT id, user_id, title, category, description, priority, estimate_min, due_date,
            done, completed_at, steps, kind, remind_at, series_id,
-           occurrence_date::text AS occurrence_date, status
+           occurrence_date::text AS occurrence_date, status, daily_cap_min
     FROM tasks
     WHERE user_id = ${userId}
     ORDER BY created_at DESC
@@ -45,14 +46,15 @@ export async function loadTasks(userId: string): Promise<Task[]> {
 export async function createTask(task: Task, userId: string): Promise<Task> {
   const rows = await sql`
     INSERT INTO tasks (id, user_id, title, category, description, priority, duration, estimate_min,
-                       due_date, done, status, steps, kind, remind_at)
+                       due_date, done, status, steps, kind, remind_at, daily_cap_min)
     VALUES (${task.id}, ${userId}, ${task.title}, ${task.category}, ${task.description},
             ${task.priority}, ${durationFromMinutes(task.estimateMin)}, ${task.estimateMin},
             ${task.dueDate}, ${task.done}, ${task.done ? "done" : "pending"},
-            ${JSON.stringify(task.steps ?? [])}::jsonb, ${task.kind}, ${task.time ?? null})
+            ${JSON.stringify(task.steps ?? [])}::jsonb, ${task.kind}, ${task.time ?? null},
+            ${task.kind === "project" ? (task.dailyCapMin ?? null) : null})
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status
+              occurrence_date::text AS occurrence_date, status, daily_cap_min
   `;
   const created = normalizeTask(rows[0]);
   if (!created) throw new Error("Failed to create task.");
@@ -76,6 +78,7 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
         estimate_min = ${task.estimateMin}, due_date = ${task.dueDate},
         done = ${task.done}, steps = ${JSON.stringify(task.steps ?? [])}::jsonb,
         kind = ${task.kind}, remind_at = ${task.time ?? null},
+        daily_cap_min = ${task.kind === "project" ? (task.dailyCapMin ?? null) : null},
         status = CASE WHEN ${task.done} THEN 'done'
                       WHEN status = 'done' THEN 'pending'
                       ELSE status END
@@ -83,7 +86,7 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
       AND (series_id IS NULL OR ${task.kind} <> 'project')
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status
+              occurrence_date::text AS occurrence_date, status, daily_cap_min
   `;
   return normalizeTask(rows[0]);
 }
@@ -96,7 +99,7 @@ export async function setTaskDone(taskId: string, done: boolean, userId: string)
     WHERE id = ${taskId} AND user_id = ${userId}
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status
+              occurrence_date::text AS occurrence_date, status, daily_cap_min
   `;
   const updated = normalizeTask(rows[0]);
   if (!updated) throw new Error("Failed to toggle task.");
@@ -161,6 +164,7 @@ export function normalizeTask(row: unknown): Task | null {
       ...(r.completed_at ? { completedAt: r.completed_at } : {}),
       ...(r.series_id ? { seriesId: r.series_id } : {}),
       ...(r.occurrence_date ? { occurrenceDate: r.occurrence_date } : {}),
+      ...(typeof r.daily_cap_min === "number" && r.kind === "project" ? { dailyCapMin: r.daily_cap_min } : {}),
       steps: normalizeSteps(r.steps)
     };
   }

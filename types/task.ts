@@ -40,6 +40,8 @@ export interface TaskInput {
   time?: string;
   /** Si viene, el servidor crea UNA serie en vez de una tarea suelta. */
   repeat?: RepeatSpec;
+  /** Solo proyectos: tope de minutos por día que el scheduler puede darle. Sin valor = sin tope. */
+  dailyCapMin?: number;
 }
 
 export interface TaskStep {

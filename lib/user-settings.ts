@@ -1,5 +1,12 @@
 import "server-only";
 import sql from "@/lib/db";
+import {
+  parseAvailability,
+  readAvailability,
+  readOverrides,
+  type Availability,
+  type AvailabilityOverrides
+} from "@/lib/availability";
 import { getTodayInTimeZone, isValidTimeZone } from "@/lib/task-date";
 
 const DEFAULT_TIME_ZONE = "UTC";
@@ -43,4 +50,43 @@ export async function resolveUserTimeZone(userId: string, reported?: unknown): P
 export async function getUserToday(userId: string, now: Date = new Date()): Promise<string> {
   const zone = (await getUserTimeZone(userId)) ?? DEFAULT_TIME_ZONE;
   return getTodayInTimeZone(zone, now);
+}
+
+export type AvailabilitySettings = {
+  availability: Availability;
+  overrides: AvailabilityOverrides;
+  /** false = el usuario todavía no la configuró: se usa el default y se muestra el onboarding. */
+  configured: boolean;
+};
+
+export async function getAvailabilitySettings(userId: string): Promise<AvailabilitySettings> {
+  const rows = await sql`
+    SELECT availability, availability_overrides FROM user_settings WHERE user_id = ${userId}
+  `;
+  const row = rows[0];
+  return {
+    availability: readAvailability(row?.availability),
+    overrides: readOverrides(row?.availability_overrides),
+    configured: parseAvailability(row?.availability) !== null
+  };
+}
+
+/**
+ * Guarda la disponibilidad. Es un upsert: si el usuario todavía no tiene fila en
+ * user_settings (la zona horaria la crea en la primera carga) la crea, sin pisar
+ * su zona.
+ */
+export async function saveAvailabilitySettings(
+  userId: string,
+  availability: Availability,
+  overrides: AvailabilityOverrides
+): Promise<void> {
+  await sql`
+    INSERT INTO user_settings (user_id, availability, availability_overrides)
+    VALUES (${userId}, ${JSON.stringify(availability)}::jsonb, ${JSON.stringify(overrides)}::jsonb)
+    ON CONFLICT (user_id) DO UPDATE
+      SET availability = EXCLUDED.availability,
+          availability_overrides = EXCLUDED.availability_overrides,
+          updated_at = NOW()
+  `;
 }
