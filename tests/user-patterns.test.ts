@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adjustedEstimate,
+  estimateHint,
   chronicPostponers,
   computePatterns,
   dayPartOf,
@@ -173,5 +174,30 @@ describe("computePatterns", () => {
     expect(patterns.entries).toBe(4);
     expect(patterns.measuredNeeded).toBe(2);
     expect(patterns.hours.total).toBe(1);
+  });
+});
+
+describe("estimateHint", () => {
+  const learned = learnInflationByCategory([...measured("study", 30, 45, 6), ...measured("home", 30, 30, 6)]);
+
+  it("con aprendizaje de la categoría, dice cuánto suele tardar", () => {
+    expect(estimateHint(learned, "study", 30)).toEqual({ scope: "category", category: "study", adjustedMin: 45 });
+    expect(estimateHint(learned, " Study ", 60)).toMatchObject({ adjustedMin: 90 });
+  });
+
+  it("una categoría sin medición usa el promedio general, y lo dice", () => {
+    // global = mediana de (1.5 ×6, 1.0 ×6) = 1.25
+    expect(estimateHint(learned, "sport", 40)).toEqual({ scope: "general", category: "sport", adjustedMin: 50 });
+  });
+
+  it("no habla sin aprendizaje ni cuando la diferencia no importa", () => {
+    expect(estimateHint(learnInflationByCategory([]), "study", 30)).toBeNull();
+    expect(estimateHint(learned, "home", 30)).toBeNull(); // factor 1.0
+    expect(estimateHint(learned, "study", 6)).toBeNull(); // 6 -> 10: una diferencia de 4 min no importa
+  });
+
+  it("estimaciones inválidas no dan pista", () => {
+    expect(estimateHint(learned, "study", 0)).toBeNull();
+    expect(estimateHint(learned, "study", Number.NaN)).toBeNull();
   });
 });

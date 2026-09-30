@@ -21,7 +21,11 @@ type FocusModeProps = {
   task: Task;
   isPro?: boolean;
   isBreaking: boolean;
-  onClose: () => void;
+  /**
+   * `elapsedMinutes` is the time the timer ran before the user left without finishing, or
+   * undefined if it never did. A regular task adds it to its measured time.
+   */
+  onClose: (elapsedMinutes?: number) => void;
   onBreakDown: () => void;
   onToggleStep: (stepId: string) => void;
   /**
@@ -56,10 +60,15 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
   minutesRef.current = minutes;
   // Seconds the timer has really been running, across pauses and restarts.
   const elapsedRef = useRef(0);
-  const completeWithElapsed = () => {
+  const elapsedMinutes = () => {
     const minutesRun = Math.round(elapsedRef.current / 60);
-    onCompleteTask(minutesRun > 0 ? minutesRun : undefined);
+    return minutesRun > 0 ? minutesRun : undefined;
   };
+  const completeWithElapsed = () => onCompleteTask(elapsedMinutes());
+  // Leaving reports the time the timer ran, so a task finished on another day still adds it up.
+  const leave = () => closeRef.current(elapsedMinutes());
+  const leaveRef = useRef(leave);
+  leaveRef.current = leave;
 
   // Body doubling: Milo says something at the start, at the halfway point,
   // when the timer ends, and whenever the user says they are stuck.
@@ -122,7 +131,7 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
 
   // Esc closes; lock page scroll behind the overlay.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") leaveRef.current(); };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -155,7 +164,7 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
           <Sparkles className="h-3.5 w-3.5" /> {t.focus}
         </span>
-        <button onClick={onClose} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <button onClick={leave} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
           <X className="h-4 w-4" /> {t.exit}
         </button>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { canFocusTask } from "@/lib/focus-eligibility";
 import Image from "next/image";
 import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -365,10 +366,12 @@ export function CalendarView({
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => onFocusTask(recommendedTask.id)} className="gap-1.5">
-                    <Play className="h-4 w-4" />
-                    {focusT.focus}
-                  </Button>
+                  {canFocusTask(recommendedTask) && (
+                    <Button size="sm" onClick={() => onFocusTask(recommendedTask.id)} className="gap-1.5">
+                      <Play className="h-4 w-4" />
+                      {focusT.focus}
+                    </Button>
+                  )}
                   {!recommendedTask.steps?.length && (
                     <Button
                       size="sm"
@@ -687,7 +690,7 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
       </div>
 
       <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-        {!task.done && task.kind !== "project" && (
+        {canFocusTask(task) && (
           <button
             onClick={onFocus}
             className="rounded-md p-1 text-muted-foreground transition-colors hover:text-primary"

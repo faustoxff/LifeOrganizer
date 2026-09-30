@@ -1,5 +1,7 @@
 "use client";
 
+import { patternsCopy } from "@/lib/patterns-copy";
+import { estimateHint, type UserPatterns } from "@/lib/user-patterns";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Lock, Paperclip, X } from "lucide-react";
@@ -44,6 +46,8 @@ type TaskFormProps = {
   canCreateProjects?: boolean;
   /** Un proyecto nuevo no se guarda desde acá: sigue en el asistente (entender, dividir, confirmar). */
   onStartProject?: (draft: ProjectStartInput) => void;
+  /** Lo que Spark aprendió de cómo tarda el usuario: si viene, se muestra la estimación ajustada. */
+  patterns?: UserPatterns | null;
 };
 
 type RepeatMode = "none" | "daily" | "weekdays" | "everyNWeeks" | "monthly";
@@ -91,7 +95,8 @@ export function TaskForm({
   onCancel,
   onSubmitTask,
   canCreateProjects = false,
-  onStartProject
+  onStartProject,
+  patterns = null
 }: TaskFormProps) {
   const { copy, language } = useAppLanguage();
   const todayDateValue = getTodayDateValue();
@@ -126,6 +131,8 @@ export function TaskForm({
   const suggestedKind = suggestKind({ title, description, dueDate, time: time || undefined });
   const kind = pickedKind ?? (suggestedKind === "project" && projectsLocked ? "task" : suggestedKind);
   const isReminder = kind === "reminder";
+  const learned = patternsCopy(language);
+  const hint = patterns ? estimateHint(patterns.inflation, category, estimateMin) : null;
   const isProject = kind === "project";
   const isLockedProject = isProject && projectsLocked;
   const isProjectDraft = isProject && mode === "create" && !projectsLocked;
@@ -415,6 +422,13 @@ export function TaskForm({
                     </option>
                   ))}
                 </Select>
+                {hint && (
+                  <p className="text-xs text-muted-foreground" data-testid="estimate-hint">
+                    {hint.scope === "category"
+                      ? learned.hintCategory(estimateMin, category.trim() || "general", hint.adjustedMin)
+                      : learned.hintGeneral(estimateMin, hint.adjustedMin)}
+                  </p>
+                )}
               </div>
             )}
 

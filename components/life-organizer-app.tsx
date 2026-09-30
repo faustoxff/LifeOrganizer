@@ -30,6 +30,7 @@ import { getSkippedDates, isFutureOccurrence, isRecommendable, isSkipped } from 
 import type { EditScope } from "@/lib/task-validation";
 import { focusCopy, reminderCopy } from "@/lib/focus-copy";
 import { useChecklists } from "@/lib/use-checklists";
+import { usePatterns } from "@/lib/use-patterns";
 import { useReminders } from "@/lib/use-reminders";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { AnimatePresence } from "motion/react";
@@ -335,6 +336,8 @@ export function LifeOrganizerApp() {
     if (typeof Notification === "undefined") return;
     setNotifPermission(await Notification.requestPermission());
   }, []);
+  // La pista de "solés tardar ~N" solo hace falta con el formulario abierto.
+  const patterns = usePatterns(showForm);
   const checklists = useChecklists({
     tasks,
     plan,
@@ -435,7 +438,11 @@ export function LifeOrganizerApp() {
     }
   }
 
-  async function handleToggleTask(taskId: string) {
+  /**
+   * `focusMinutes`: lo que midió el modo foco al completar. Solo viaja cuando la tarea se
+   * completa desde ahí: con un tilde no se manda nada y no se inventa un tiempo.
+   */
+  async function handleToggleTask(taskId: string, focusMinutes?: number) {
     const current = tasks.find((t) => t.id === taskId);
     if (!current) return;
     if (!current.done) void celebrate("task");
@@ -444,7 +451,11 @@ export function LifeOrganizerApp() {
       const res = await fetch("/api/tasks", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId, done: !current.done })
+        body: JSON.stringify({
+          taskId,
+          done: !current.done,
+          ...(!current.done && typeof focusMinutes === "number" && focusMinutes > 0 ? { actualMin: focusMinutes } : {})
+        })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { task: Task };
@@ -458,6 +469,19 @@ export function LifeOrganizerApp() {
       setStorageError(getErrorMessage(err, copy.errors.unexpected));
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  /** Suma a la tarea los minutos de una sesión de foco que se cerró sin completarla. Es un extra: si falla, no molesta. */
+  async function addFocusProgress(taskId: string, minutes: number) {
+    try {
+      await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, progressMin: minutes })
+      });
+    } catch {
+      /* lo medido es un plus: no interrumpe */
     }
   }
 
@@ -914,10 +938,16 @@ export function LifeOrganizerApp() {
           task={focusTask}
           isPro={plan === "pro"}
           isBreaking={breakingDownTaskId === focusTask.id}
-          onClose={() => setFocusTaskId(null)}
+          // Sin pasos, la tarea también se termina desde acá: es donde se mide cuánto tardó.
+          alwaysAllowComplete
+          onClose={(elapsedMinutes) => {
+            // Cerrar el foco sin terminar no pierde lo trabajado: suma al tiempo medido de la tarea.
+            if (elapsedMinutes) void addFocusProgress(focusTask.id, elapsedMinutes);
+            setFocusTaskId(null);
+          }}
           onBreakDown={() => void handleBreakDown(focusTask.id)}
           onToggleStep={(stepId) => handleToggleStep(focusTask.id, stepId)}
-          onCompleteTask={() => { void handleToggleTask(focusTask.id); setFocusTaskId(null); }}
+          onCompleteTask={(elapsedMinutes) => { void handleToggleTask(focusTask.id, elapsedMinutes); setFocusTaskId(null); }}
         />
       )}
 
@@ -1052,6 +1082,7 @@ export function LifeOrganizerApp() {
               onSubmitTask={editingTask ? handleUpdateTask : handleCreateTask}
               canCreateProjects={plan !== "free"}
               onStartProject={handleStartProject}
+              patterns={patterns}
             />
           </div>
         </div>

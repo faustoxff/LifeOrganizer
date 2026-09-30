@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { statsExtraCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { StreakBadges } from "@/components/streak-badges";
+import { WorkPatterns } from "@/components/work-patterns";
+import type { UserPatterns } from "@/lib/user-patterns";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,8 @@ type StatsData = {
   totalCompleted: number;
   totalPending: number;
   encouragement: string;
+  /** Lo aprendido de los últimos 90 días. null si no se pudo calcular. */
+  patterns?: UserPatterns | null;
 };
 
 
@@ -61,8 +65,8 @@ export function StatsPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-background px-4 py-6 sm:px-8 lg:h-dvh lg:overflow-hidden lg:py-8">
-      <div className="mx-auto flex h-full max-w-5xl flex-col">
+    <div className="min-h-dvh bg-background px-4 py-6 sm:px-8 lg:h-dvh lg:overflow-y-auto lg:py-8">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col">
         <div className="mb-5 flex flex-shrink-0 items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{copy.stats.title}</h1>
@@ -150,6 +154,11 @@ export function StatsPage() {
                 </div>
               </div>
             </div>
+            {data.patterns && (
+              <div className="lg:col-span-3">
+                <WorkPatterns patterns={data.patterns} />
+              </div>
+            )}
           </div>
         )}
       </div>

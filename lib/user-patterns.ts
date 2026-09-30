@@ -107,6 +107,35 @@ export function adjustedEstimate(estimateMin: number, factor: number): number {
   return Math.ceil((estimateMin * factor) / 5) * 5;
 }
 
+export type EstimateHint = {
+  /** De dónde sale el factor: la categoría misma o el promedio general del usuario. */
+  scope: "category" | "general";
+  category: string;
+  /** Lo que suele tardar de verdad, en minutos (múltiplo de 5). */
+  adjustedMin: number;
+};
+
+/** Diferencia mínima (min) para que valga la pena avisar: 30 → 32 no le sirve a nadie. */
+export const MIN_HINT_GAP_MIN = 5;
+
+/**
+ * Lo que se le muestra al estimar una tarea nueva ("Estimaste 30; en Estudio solés tardar
+ * ~45"). Solo habla si hay aprendizaje real (de la categoría o general) y la diferencia
+ * importa. Sin aprendizaje, no dice nada: el default (1.3) es una suposición, no un dato.
+ */
+export function estimateHint(
+  learned: InflationByCategory,
+  category: string | null | undefined,
+  estimateMin: number
+): EstimateHint | null {
+  if (!Number.isFinite(estimateMin) || estimateMin <= 0) return null;
+  const result = inflationFor(learned, category);
+  if (result.source === "default") return null;
+  const adjustedMin = adjustedEstimate(estimateMin, result.factor);
+  if (adjustedMin - estimateMin < MIN_HINT_GAP_MIN) return null;
+  return { scope: result.source === "category" ? "category" : "general", category: normalizeCategory(category), adjustedMin };
+}
+
 // ---------------------------------------------------------------------------
 // Horas productivas
 // ---------------------------------------------------------------------------
