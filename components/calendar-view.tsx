@@ -74,6 +74,13 @@ type CalendarViewProps = {
   onBreakDown: (id: string) => void;
   breakingDownTaskId: string | null;
   onQuickAdd: (title: string) => Promise<void>;
+  /** Progreso X/Y por id de proyecto: las filas de proyecto lo muestran. */
+  projectProgress?: Record<string, { done: number; total: number }>;
+  onOpenProject?: (projectId: string) => void;
+  /** Lo que va entre la recomendación y los recordatorios: las sesiones de proyectos de hoy. */
+  projectSlot?: ReactNode;
+  /** Sesiones de proyecto de hoy: se suman al conteo de pendientes del encabezado. */
+  extraPending?: number;
 };
 
 export function CalendarView({
@@ -88,7 +95,11 @@ export function CalendarView({
   onFocusTask,
   onBreakDown,
   breakingDownTaskId,
-  onQuickAdd
+  onQuickAdd,
+  projectProgress,
+  onOpenProject,
+  projectSlot,
+  extraPending = 0
 }: CalendarViewProps) {
   const { language, copy } = useAppLanguage();
   const focusT = focusCopy[language];
@@ -192,6 +203,8 @@ export function CalendarView({
         onEdit={() => onEditTask(task.id)}
         onDelete={() => void onDeleteTask(task.id)}
         onFocus={() => onFocusTask(task.id)}
+        progress={task.kind === "project" ? projectProgress?.[task.id] : undefined}
+        onOpenProject={task.kind === "project" && onOpenProject ? () => onOpenProject(task.id) : undefined}
       />
     );
   }
@@ -251,7 +264,7 @@ export function CalendarView({
           <div>
             <h2 className="text-lg font-semibold leading-7 tracking-tight">{copy.calendar.myTasks}</h2>
             <p className="text-xs leading-4 text-muted-foreground">
-              {pendingCount} {copy.taskList.pending.toLowerCase()}
+              {pendingCount + extraPending} {copy.taskList.pending.toLowerCase()}
             </p>
           </div>
           <Button
@@ -376,6 +389,8 @@ export function CalendarView({
             ) : null}
           </div>
         )}
+
+        {projectSlot}
 
         {/* Today's reminders: timed one-liners that never compete as the recommended task */}
         {todayReminders.length > 0 && (
@@ -585,9 +600,11 @@ type TaskRowProps = {
   onEdit: () => void;
   onDelete: () => void;
   onFocus: () => void;
+  progress?: { done: number; total: number };
+  onOpenProject?: () => void;
 };
 
-function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus }: TaskRowProps) {
+function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus, progress, onOpenProject }: TaskRowProps) {
   const { copy } = useAppLanguage();
   const focusT = focusCopy[language];
   const steps = task.steps ?? [];
@@ -632,6 +649,14 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
               {copy.taskForm.kinds.project}
             </span>
           )}
+          {task.kind === "project" && progress && progress.total > 0 && (
+            <span className="text-xs font-medium tabular-nums text-primary/90">{progress.done}/{progress.total}</span>
+          )}
+          {task.kind === "project" && onOpenProject && (
+            <button onClick={onOpenProject} className="text-xs font-semibold text-primary underline underline-offset-2">
+              {copy.project.viewPlan}
+            </button>
+          )}
           {task.kind === "reminder" && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
               <Bell className="h-2.5 w-2.5" />
@@ -656,7 +681,7 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
       </div>
 
       <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-        {!task.done && (
+        {!task.done && task.kind !== "project" && (
           <button
             onClick={onFocus}
             className="rounded-md p-1 text-muted-foreground transition-colors hover:text-primary"

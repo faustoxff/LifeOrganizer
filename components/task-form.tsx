@@ -1,12 +1,15 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Lock, Paperclip, X } from "lucide-react";
 import { useAppLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ACCEPTED_FILE_TYPES, checkFile, MAX_FILES, type FileProblem } from "@/lib/project-limits";
 import { weekdayOf } from "@/lib/recurrence";
 import { weekdayShortName } from "@/lib/repeat-label";
 import { getTodayDateValue } from "@/lib/task-date";
@@ -23,12 +26,24 @@ import type { RepeatSpec, TaskInput, TaskKind, TaskPriority } from "@/types/task
 /** Lo que el formulario sabe editar: una tarea, sin la regla de repetición. */
 export type TaskFormValues = Omit<TaskInput, "repeat">;
 
+/** Lo que el formulario junta para arrancar el flujo de un proyecto. */
+export type ProjectStartInput = {
+  title: string;
+  description: string;
+  deadline: string;
+  files: File[];
+};
+
 type TaskFormProps = {
   initialValues?: TaskFormValues;
   isSubmitting?: boolean;
   mode?: "create" | "edit";
   onCancel?: () => void;
   onSubmitTask: (task: TaskInput) => Promise<boolean>;
+  /** Plus/Pro. Sin esto, el tipo Proyecto aparece bloqueado con un enlace a los planes. */
+  canCreateProjects?: boolean;
+  /** Un proyecto nuevo no se guarda desde acá: sigue en el asistente (entender, dividir, confirmar). */
+  onStartProject?: (draft: ProjectStartInput) => void;
 };
 
 type RepeatMode = "none" | "daily" | "weekdays" | "everyNWeeks" | "monthly";
@@ -74,7 +89,9 @@ export function TaskForm({
   isSubmitting = false,
   mode = "create",
   onCancel,
-  onSubmitTask
+  onSubmitTask,
+  canCreateProjects = false,
+  onStartProject
 }: TaskFormProps) {
   const { copy, language } = useAppLanguage();
   const todayDateValue = getTodayDateValue();
@@ -99,13 +116,22 @@ export function TaskForm({
   const [repeatWeekdays, setRepeatWeekdays] = useState<number[]>([]);
   const [repeatWeeks, setRepeatWeeks] = useState(2);
   const [showTimeError, setShowTimeError] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileProblem, setFileProblem] = useState<FileProblem | "too-many" | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
+  // Projects are a paid feature: a Free user who is merely *suggested* a project
+  // gets a plain task, and one who picks it sees why it is locked.
+  const projectsLocked = mode === "create" && !canCreateProjects;
   const suggestedKind = suggestKind({ title, description, dueDate, time: time || undefined });
-  const kind = pickedKind ?? suggestedKind;
+  const kind = pickedKind ?? (suggestedKind === "project" && projectsLocked ? "task" : suggestedKind);
   const isReminder = kind === "reminder";
+  const isProject = kind === "project";
+  const isLockedProject = isProject && projectsLocked;
+  const isProjectDraft = isProject && mode === "create" && !projectsLocked;
   // Los proyectos no se repiten, y la regla de una serie no se cambia desde una
   // ocurrencia: solo se ofrece al crear una tarea o un recordatorio.
-  const canRepeat = mode === "create" && kind !== "project";
+  const canRepeat = mode === "create" && !isProject;
   const usesWeekdays = repeatMode === "weekdays" || repeatMode === "everyNWeeks";
   const dueWeekday = dueDate ? weekdayOf(dueDate) : new Date().getDay();
   const shownWeekdays = repeatWeekdays.length > 0 ? repeatWeekdays : [dueWeekday];
@@ -117,11 +143,34 @@ export function TaskForm({
     });
   }
 
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    let problem: FileProblem | "too-many" | null = null;
+    const next = [...files];
+    for (const file of Array.from(list)) {
+      if (next.some((f) => f.name === file.name && f.size === file.size)) continue;
+      if (next.length >= MAX_FILES) { problem = "too-many"; break; }
+      const bad = checkFile(file);
+      if (bad) { problem = bad; continue; }
+      next.push(file);
+    }
+    setFiles(next);
+    setFileProblem(problem);
+    // Same file picked again after removing it must still fire `change`.
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
+    if (isLockedProject) return;
+
+    if (isProjectDraft) {
+      onStartProject?.({ title: trimmedTitle, description: description.trim(), deadline: dueDate || todayDateValue, files });
+      return;
+    }
 
     if (isReminder && !time) {
       setShowTimeError(true);
@@ -183,6 +232,7 @@ export function TaskForm({
                     : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 )}
               >
+                {option === "project" && projectsLocked && <Lock className="mr-1 inline h-3 w-3" aria-hidden />}
                 {copy.taskForm.kinds[option]}
               </button>
             ))}
@@ -257,7 +307,7 @@ export function TaskForm({
             />
           </div>
 
-          <div className="flex min-w-0 flex-col gap-2">
+          {!isProject && <div className="flex min-w-0 flex-col gap-2">
             <Label className="flex min-h-10 items-end" htmlFor="task-time">
               {isReminder ? copy.taskForm.time : copy.taskForm.timeOptional}
             </Label>
@@ -274,7 +324,7 @@ export function TaskForm({
               type="time"
               value={time}
             />
-          </div>
+          </div>}
         </div>
         {showTimeError && isReminder && !time && (
           <p role="alert" className="-mt-2 text-xs text-destructive">
@@ -282,7 +332,72 @@ export function TaskForm({
           </p>
         )}
 
-        {(!isReminder || canRepeat) && (
+        {isLockedProject && (
+          <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
+            <p className="flex items-center gap-2 font-medium">
+              <Lock className="h-4 w-4 text-primary" aria-hidden />
+              {copy.project.lockedNote}
+            </p>
+            <Link href="/plans" className="w-fit font-semibold text-primary underline underline-offset-2">
+              {copy.project.upgrade}
+            </Link>
+          </div>
+        )}
+
+        {isProjectDraft && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-files">{copy.project.filesLabel}</Label>
+            <input
+              ref={fileInput}
+              id="project-files"
+              type="file"
+              multiple
+              accept={ACCEPTED_FILE_TYPES}
+              onChange={(e) => addFiles(e.target.files)}
+              className="sr-only"
+            />
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              disabled={isSubmitting || files.length >= MAX_FILES}
+              className="flex w-fit items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+            >
+              <Paperclip className="h-4 w-4" aria-hidden />
+              {copy.project.filesLabel}
+            </button>
+            {files.length > 0 && (
+              <ul className="flex flex-col gap-1.5">
+                {files.map((file) => (
+                  <li key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 px-3 py-1.5 text-sm">
+                    <span className="min-w-0 truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`${copy.project.filesRemove}: ${file.name}`}
+                      onClick={() => { setFiles((current) => current.filter((f) => f !== file)); setFileProblem(null); }}
+                      className="flex-shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {copy.project.filesHint} · {copy.project.filesImages}
+            </p>
+            {fileProblem && (
+              <p role="alert" className="text-xs text-destructive">
+                {fileProblem === "too-many"
+                  ? copy.project.filesTooMany
+                  : fileProblem === "too-big"
+                    ? copy.project.filesTooBig
+                    : copy.project.filesUnsupported}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!isProject && (!isReminder || canRepeat) && (
           <div className={cn("grid gap-4", !isReminder && canRepeat && "sm:grid-cols-2")}>
             {!isReminder && (
               <div className="flex min-w-0 flex-col gap-2">
@@ -367,14 +482,16 @@ export function TaskForm({
         )}
 
         <div className="mt-2 flex flex-wrap gap-3">
-          <Button disabled={isSubmitting} type="submit">
-            {isSubmitting
-              ? mode === "edit"
-                ? copy.common.saving
-                : copy.common.adding
-              : mode === "edit"
-                ? copy.taskForm.editSubmit
-                : copy.taskForm.addTask}
+          <Button disabled={isSubmitting || isLockedProject} type="submit">
+            {isProjectDraft
+              ? copy.project.continueLabel
+              : isSubmitting
+                ? mode === "edit"
+                  ? copy.common.saving
+                  : copy.common.adding
+                : mode === "edit"
+                  ? copy.taskForm.editSubmit
+                  : copy.taskForm.addTask}
           </Button>
           {mode === "edit" && onCancel ? (
             <Button

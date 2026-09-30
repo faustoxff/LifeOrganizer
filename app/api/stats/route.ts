@@ -4,6 +4,7 @@ import { AppLanguage, supportedLanguages } from "@/lib/i18n";
 import { chatWithMilo } from "@/lib/milo";
 import { requireAuth, getUserPlan, type UserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage } from "@/lib/usage-limits";
+import { loadSubtaskDoneDays } from "@/lib/projects-storage";
 import { loadTasks } from "@/lib/storage";
 import { bestStreakFromDayKeys, streakFromDayKeys } from "@/lib/streak";
 import { getSkippedDates, isSkipped } from "@/lib/task-views";
@@ -35,15 +36,15 @@ export async function GET(request: Request) {
   const uiLanguage: AppLanguage = supportedLanguages.includes(langParam as AppLanguage)
     ? (langParam as AppLanguage)
     : "en";
-  const allTasks = await loadTasks(userId);
+  const [allTasks, projectDays] = await Promise.all([loadTasks(userId), loadSubtaskDoneDays(userId)]);
   // An occurrence the user let pass is neither pending nor failed: it stays out
   // of every count, and its day neither adds to a streak nor breaks it.
   const tasks = allTasks.filter((t) => !isSkipped(t));
   const skippedDays = new Set(getSkippedDates(allTasks));
 
   const completionRate = getCompletionRate(tasks);
-  const activeStreak = getActiveStreak(tasks, skippedDays);
-  const bestStreak = getBestStreak(tasks, skippedDays);
+  const activeStreak = getActiveStreak(tasks, skippedDays, projectDays);
+  const bestStreak = getBestStreak(tasks, skippedDays, projectDays);
   const byCategory = getByCategory(tasks);
   const totalCompleted = tasks.filter((t) => t.done).length;
   const totalPending = tasks.filter((t) => !t.done).length;
@@ -183,21 +184,26 @@ function getByCategory(tasks: Task[]): { category: string; count: number; isOthe
   return restTotal > 0 ? [...top, { category: "", count: restTotal, isOther: true }] : top;
 }
 
-function getActiveStreak(tasks: Task[], skippedDays: ReadonlySet<string>): number {
-  const completedDates = new Set(
-    tasks
+function getActiveStreak(tasks: Task[], skippedDays: ReadonlySet<string>, projectDays: readonly string[]): number {
+  // A day spent on a project subtask counts like a finished task.
+  const completedDates = new Set([
+    ...tasks
       .filter((t) => t.done && t.completedAt)
-      .map((t) => new Date(t.completedAt!).toISOString().split("T")[0])
-  );
+      .map((t) => new Date(t.completedAt!).toISOString().split("T")[0]),
+    ...projectDays
+  ]);
 
   return streakFromDayKeys(completedDates, skippedDays, new Date().toISOString().split("T")[0], false);
 }
 
 /** Longest run of consecutive days with at least one completed task, ever. */
-function getBestStreak(tasks: Task[], skippedDays: ReadonlySet<string>): number {
-  const days = tasks
-    .filter((t) => t.done && t.completedAt)
-    .map((t) => new Date(t.completedAt!).toISOString().split("T")[0]);
+function getBestStreak(tasks: Task[], skippedDays: ReadonlySet<string>, projectDays: readonly string[]): number {
+  const days = [
+    ...tasks
+      .filter((t) => t.done && t.completedAt)
+      .map((t) => new Date(t.completedAt!).toISOString().split("T")[0]),
+    ...projectDays
+  ];
 
   return bestStreakFromDayKeys(days, skippedDays);
 }

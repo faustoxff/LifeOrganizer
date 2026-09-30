@@ -282,6 +282,22 @@ export async function loadEstimateHistory(userId: string): Promise<EstimateSampl
   return rows.map((r) => ({ estimateMin: Number(r.estimate_min), actualMin: Number(r.actual_min) }));
 }
 
+/**
+ * Los días (UTC, "YYYY-MM-DD") en que el usuario terminó alguna subtarea de proyecto.
+ * Un día de trabajo en un proyecto es un día de trabajo: cuenta para la racha igual
+ * que una tarea suelta.
+ */
+export async function loadSubtaskDoneDays(userId: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT DISTINCT (done_at AT TIME ZONE 'UTC')::date::text AS day
+    FROM subtasks
+    WHERE user_id = ${userId} AND done = TRUE AND done_at IS NOT NULL
+    ORDER BY day DESC
+    LIMIT 1000
+  `;
+  return rows.map((r) => String(r.day));
+}
+
 /** Anota los tokens de una llamada de IA de proyectos. */
 export async function logAiTokens(userId: string, kind: string, completion: Completion): Promise<void> {
   await sql`

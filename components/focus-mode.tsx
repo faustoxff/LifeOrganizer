@@ -24,11 +24,19 @@ type FocusModeProps = {
   onClose: () => void;
   onBreakDown: () => void;
   onToggleStep: (stepId: string) => void;
-  onCompleteTask: () => void;
+  /**
+   * `elapsedMinutes` is the time the timer actually ran (rounded), or undefined if it
+   * never did. A project session uses it as the real time spent.
+   */
+  onCompleteTask: (elapsedMinutes?: number) => void;
+  /** Show a "done" button even without steps (a project session has none). */
+  alwaysAllowComplete?: boolean;
+  /** Hide "break it into steps": a project session is already one step of a plan. */
+  hideBreakDown?: boolean;
 };
 
 // One task, one step, one timer: everything else is hidden on purpose.
-export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDown, onToggleStep, onCompleteTask }: FocusModeProps) {
+export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDown, onToggleStep, onCompleteTask, alwaysAllowComplete = false, hideBreakDown = false }: FocusModeProps) {
   const { language } = useAppLanguage();
   const t = focusCopy[language];
   const c = companionCopy[language];
@@ -46,6 +54,12 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
   taskRef.current = task;
   const minutesRef = useRef(minutes);
   minutesRef.current = minutes;
+  // Seconds the timer has really been running, across pauses and restarts.
+  const elapsedRef = useRef(0);
+  const completeWithElapsed = () => {
+    const minutesRun = Math.round(elapsedRef.current / 60);
+    onCompleteTask(minutesRun > 0 ? minutesRun : undefined);
+  };
 
   // Body doubling: Milo says something at the start, at the halfway point,
   // when the timer ends, and whenever the user says they are stuck.
@@ -86,6 +100,7 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
   useEffect(() => {
     if (!running) return;
     const id = window.setInterval(() => {
+      elapsedRef.current += 1;
       setRemaining((r) => {
         if (r <= 1) {
           setRunning(false);
@@ -161,7 +176,7 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
             <p className="mt-2 text-lg font-medium leading-snug">{currentStep ? currentStep.text : t.taskDone}</p>
             <Button
               className="mt-4 gap-1.5"
-              onClick={() => (currentStep ? onToggleStep(currentStep.id) : onCompleteTask())}
+              onClick={() => (currentStep ? onToggleStep(currentStep.id) : completeWithElapsed())}
             >
               <CheckCircle2 className="h-4 w-4" />
               {currentStep ? t.stepDone : t.taskDone}
@@ -169,11 +184,21 @@ export function FocusMode({ task, isPro = false, isBreaking, onClose, onBreakDow
           </motion.div>
         ) : (
           <div className="mt-6 w-full rounded-2xl border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground">{t.hint}</p>
-            <Button className="mt-3 gap-1.5" variant="outline" disabled={isBreaking} onClick={onBreakDown}>
-              <Sparkles className="h-4 w-4" />
-              {isBreaking ? t.breaking : t.breakDown}
-            </Button>
+            {!hideBreakDown && (
+              <>
+                <p className="text-sm text-muted-foreground">{t.hint}</p>
+                <Button className="mt-3 gap-1.5" variant="outline" disabled={isBreaking} onClick={onBreakDown}>
+                  <Sparkles className="h-4 w-4" />
+                  {isBreaking ? t.breaking : t.breakDown}
+                </Button>
+              </>
+            )}
+            {alwaysAllowComplete && (
+              <Button className={cn("gap-1.5", !hideBreakDown && "ml-2 mt-3")} onClick={completeWithElapsed}>
+                <CheckCircle2 className="h-4 w-4" />
+                {t.taskDone}
+              </Button>
+            )}
           </div>
         )}
 

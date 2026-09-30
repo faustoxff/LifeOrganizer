@@ -7,6 +7,10 @@ import { AvailabilityDialog } from "@/components/availability-dialog";
 import { CalendarView } from "@/components/calendar-view";
 import { FocusMode } from "@/components/focus-mode";
 import { GemUnlock } from "@/components/gem-unlock";
+import { ProjectAlerts } from "@/components/project-alerts";
+import { ProjectDetail } from "@/components/project-detail";
+import { HowLongDialog, getTodaySessions, TodayProjectSessions, type TodaySession } from "@/components/project-sessions";
+import { ProjectWizard } from "@/components/project-wizard";
 import { useAuth } from "@/components/auth-gate";
 import { useAppLanguage } from "@/components/language-provider";
 import { MiloChat } from "@/components/milo-chat";
@@ -14,7 +18,7 @@ import { PlanZapIcon } from "@/components/plan-zap-icon";
 import { ScopeDialog } from "@/components/scope-dialog";
 import { getUserDisplayName } from "@/lib/auth";
 import { DEFAULT_AVAILABILITY, parseAvailability, type Availability } from "@/lib/availability";
-import { TaskForm } from "@/components/task-form";
+import { TaskForm, type ProjectStartInput } from "@/components/task-form";
 import { Button } from "@/components/ui/button";
 import { TextAnimate } from "@/components/ui/text-animate";
 import { formatTodayLongDate, getDeviceTimeZone, getTodayDateValue } from "@/lib/task-date";
@@ -29,6 +33,7 @@ import { useUserPlan } from "@/lib/use-user-plan";
 import { AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { AiPriorityApiResponse, AiPriorityRecommendation } from "@/types/ai-priority";
+import type { ProjectView } from "@/types/project";
 import { Task, TaskInput, TaskStep } from "@/types/task";
 
 const FALLBACK_STORAGE_ERROR_MESSAGE = "An unexpected error occurred.";
@@ -56,6 +61,14 @@ export function LifeOrganizerApp() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Projects: the plans the scheduler keeps for the user, and what is open on top of them.
+  const [projects, setProjects] = useState<ProjectView[]>([]);
+  const [projectsBusy, setProjectsBusy] = useState(false);
+  const [wizardStart, setWizardStart] = useState<ProjectStartInput | null>(null);
+  const [detailProjectId, setDetailProjectId] = useState<string | null>(null);
+  const [focusSession, setFocusSession] = useState<TodaySession | null>(null);
+  // Set when a focus session ended without the timer: we still owe "how long did it take?".
+  const [askHowLong, setAskHowLong] = useState<string | null>(null);
   // How much time per day the user can give their pending work. `configured`
   // false means they never set it: the first visit shows the onboarding step.
   const [availability, setAvailability] = useState<{ values: Availability; configured: boolean } | null>(null);
@@ -161,6 +174,37 @@ export function LifeOrganizerApp() {
     return () => { active = false; };
   }, []);
 
+  // Projects and their agenda. The first load of the day replans on the server (once
+  // per user per day); every later action replans on its own.
+  useEffect(() => {
+    let active = true;
+    async function loadProjects() {
+      try {
+        const res = await fetch(`/api/projects?tz=${encodeURIComponent(getDeviceTimeZone())}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { projects?: ProjectView[] };
+        if (active && Array.isArray(data.projects)) setProjects(data.projects);
+      } catch {
+        /* projects are additive: the rest of the app works without them */
+      }
+    }
+    void loadProjects();
+    return () => { active = false; };
+  }, []);
+
+  /** Re-reads the availability after an action changed it (e.g. "add minutes per day"). */
+  async function refreshAvailability() {
+    try {
+      const res = await fetch("/api/settings/availability");
+      if (!res.ok) return;
+      const data = (await res.json()) as { availability?: unknown };
+      const values = parseAvailability(data.availability);
+      if (values) setAvailability({ values, configured: true });
+    } catch {
+      /* it will be re-read on the next load */
+    }
+  }
+
   async function handleSaveAvailability(values: Availability) {
     try {
       const res = await fetch("/api/settings/availability", {
@@ -206,14 +250,35 @@ export function LifeOrganizerApp() {
     [visibleTasks, today]
   );
 
+  // Today's project sessions compete for the recommendation like any other pending
+  // work; a plan that is running late weighs more.
+  const todaySessions = useMemo(() => getTodaySessions(projects, today), [projects, today]);
+
   const aiRequestTasks = useMemo(() =>
-    [...pendingTasks]
-      .map(({ id, title, category, description, priority, estimateMin, dueDate }) =>
+    [
+      ...pendingTasks.map(({ id, title, category, description, priority, estimateMin, dueDate }) =>
         ({ id, title, category, description, priority, estimateMin, dueDate })
-      )
-      .sort((a, b) => a.id.localeCompare(b.id)),
-    [pendingTasks]
+      ),
+      ...todaySessions.map(({ session, subtask, project }) => ({
+        id: `session:${subtask.id}`,
+        title: `${project.task.title}: ${subtask.title}`,
+        category: "project",
+        description: "",
+        priority: (project.plan && (!project.plan.feasible || project.plan.bufferConsumedPct > 50) ? "high" : "medium") as Task["priority"],
+        estimateMin: session.minutes,
+        dueDate: project.task.dueDate
+      }))
+    ].sort((a, b) => a.id.localeCompare(b.id)),
+    [pendingTasks, todaySessions]
   );
+  const recommendedSubtaskId = aiRecommendation?.recommendedTaskId.startsWith("session:")
+    ? aiRecommendation.recommendedTaskId.slice("session:".length)
+    : null;
+  const projectProgress = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.task.id, p.progress])),
+    [projects]
+  );
+  const detailProject = detailProjectId ? projects.find((p) => p.task.id === detailProjectId) ?? null : null;
 
   const aiRequestKey = useMemo(() =>
     JSON.stringify({ language, tasks: aiRequestTasks }),
@@ -222,7 +287,7 @@ export function LifeOrganizerApp() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (pendingTasks.length === 0) { setAiRecommendation(null); setIsAiLoading(false); return; }
+    if (aiRequestTasks.length === 0) { setAiRecommendation(null); setIsAiLoading(false); return; }
 
     const cached = aiRecommendationCacheRef.current.get(aiRequestKey);
     if (cached) { setAiRecommendation(cached); setIsAiLoading(false); return; }
@@ -254,7 +319,7 @@ export function LifeOrganizerApp() {
     }
     void loadRec();
     return () => ctrl.abort();
-  }, [aiRequestKey, aiRequestTasks, isLoaded, language, pendingTasks.length]);
+  }, [aiRequestKey, aiRequestTasks, isLoaded, language]);
 
   const reminders = useReminders(todayTasks, language, isLoaded, user.id);
   const focusTask = focusTaskId ? tasks.find((t) => t.id === focusTaskId) ?? null : null;
@@ -395,6 +460,8 @@ export function LifeOrganizerApp() {
       if (editingTaskId === taskId) { setEditingTaskId(null); setShowForm(false); }
       if (data.reload) await reloadTasks();
       else setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      // Deleting a project takes its subtasks and agenda with it (cascade on the server).
+      setProjects((prev) => prev.filter((p) => p.task.id !== taskId));
       setStorageError("");
     } catch (err) {
       setStorageError(getErrorMessage(err, copy.errors.unexpected));
@@ -416,10 +483,12 @@ export function LifeOrganizerApp() {
   }
 
   /** Shows the celebration the first time a milestone is reached. */
-  function checkGemUnlock(nextTasks: Task[]) {
+  function checkGemUnlock(nextTasks: Task[], views: ProjectView[] = projects) {
+    // A day spent on a project subtask is a day of work too, so it keeps the streak alive.
+    const subtaskDays = views.flatMap((v) => v.subtasks.map((s) => (s.done ? s.doneAt : undefined)));
     // Skipped occurrences ride along so their days neither add to the streak nor break it.
     const streak = getStreakFromCompletions(
-      nextTasks.map((t) => (t.done ? t.completedAt : undefined)),
+      [...nextTasks.map((t) => (t.done ? t.completedAt : undefined)), ...subtaskDays],
       getSkippedDates(nextTasks)
     );
     const badge = getCurrentBadge(streak);
@@ -505,6 +574,67 @@ export function LifeOrganizerApp() {
       dueDate: getTodayDateValue(),
       kind: "task"
     });
+  }
+
+  /** Runs a project request and swaps in the fresh plans it answers with. */
+  async function projectCall(
+    url: string,
+    method: "PATCH",
+    body: Record<string, unknown>
+  ): Promise<{ projects: ProjectView[]; projectDone?: boolean } | null> {
+    setProjectsBusy(true);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, tz: getDeviceTimeZone() })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { projects: ProjectView[]; projectDone?: boolean };
+      setProjects(data.projects);
+      setStorageError("");
+      return data;
+    } catch (err) {
+      setStorageError(getErrorMessage(err, copy.errors.unexpected));
+      return null;
+    } finally {
+      setProjectsBusy(false);
+    }
+  }
+
+  async function handleSubtaskAction(
+    subtaskId: string,
+    payload: { action: "complete"; actualMin: number | null } | { action: "progress"; minutes: number } | { action: "skip" }
+  ) {
+    const data = await projectCall("/api/projects/subtasks", "PATCH", { subtaskId, ...payload });
+    if (!data) return;
+    if (payload.action === "complete") {
+      void celebrate(data.projectDone ? "task" : "step");
+      checkGemUnlock(tasks, data.projects);
+    }
+    // Finishing the last subtask finishes the project task: read it back.
+    if (data.projectDone) await reloadTasks();
+  }
+
+  async function handleMoveDeadline(projectId: string, deadline: string) {
+    const data = await projectCall("/api/projects", "PATCH", { action: "move-deadline", projectId, deadline });
+    if (data) await reloadTasks();
+  }
+
+  async function handleAddMinutes(extraMin: number) {
+    const data = await projectCall("/api/projects", "PATCH", { action: "add-minutes", extraMin });
+    if (data) await refreshAvailability();
+  }
+
+  async function handleProjectCreated(created: ProjectView[]) {
+    setProjects(created);
+    await Promise.all([reloadTasks(), refreshAvailability()]);
+  }
+
+  function handleStartProject(draft: ProjectStartInput) {
+    setEditingTaskId(null);
+    setShowForm(false);
+    setWizardStart(draft);
   }
 
   function handleAddTask() {
@@ -671,6 +801,14 @@ export function LifeOrganizerApp() {
         </div>
       )}
 
+      <ProjectAlerts
+        projects={projects}
+        disabled={projectsBusy}
+        onOpen={setDetailProjectId}
+        onMoveDeadline={(id, deadline) => void handleMoveDeadline(id, deadline)}
+        onAddMinutes={(extra) => void handleAddMinutes(extra)}
+      />
+
       {/* Main two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Milo chat */}
@@ -701,6 +839,21 @@ export function LifeOrganizerApp() {
             onBreakDown={handleBreakDown}
             breakingDownTaskId={breakingDownTaskId}
             onQuickAdd={handleQuickAdd}
+            projectProgress={projectProgress}
+            onOpenProject={setDetailProjectId}
+            extraPending={todaySessions.length}
+            projectSlot={
+              <TodayProjectSessions
+                sessions={todaySessions}
+                recommendedSubtaskId={recommendedSubtaskId}
+                disabled={projectsBusy}
+                onComplete={(subtaskId, actualMin) => void handleSubtaskAction(subtaskId, { action: "complete", actualMin })}
+                onProgress={(subtaskId, minutes) => void handleSubtaskAction(subtaskId, { action: "progress", minutes })}
+                onSkip={(subtaskId) => void handleSubtaskAction(subtaskId, { action: "skip" })}
+                onFocus={setFocusSession}
+                onOpenProject={setDetailProjectId}
+              />
+            }
           />
         </main>
       </div>
@@ -748,6 +901,68 @@ export function LifeOrganizerApp() {
         ))}
       </nav>
 
+      {focusSession && (
+        <FocusMode
+          task={{
+            id: focusSession.subtask.id,
+            title: `${focusSession.project.task.title}: ${focusSession.subtask.title}`,
+            category: "project",
+            description: "",
+            priority: "medium",
+            estimateMin: focusSession.session.minutes,
+            dueDate: today,
+            done: false,
+            status: "pending",
+            kind: "task"
+          }}
+          isPro={plan === "pro"}
+          isBreaking={false}
+          alwaysAllowComplete
+          hideBreakDown
+          onClose={() => setFocusSession(null)}
+          onBreakDown={() => {}}
+          onToggleStep={() => {}}
+          onCompleteTask={(elapsedMinutes) => {
+            const subtaskId = focusSession.subtask.id;
+            setFocusSession(null);
+            // The timer's own time is the real time; without it, ask.
+            if (elapsedMinutes) void handleSubtaskAction(subtaskId, { action: "complete", actualMin: elapsedMinutes });
+            else setAskHowLong(subtaskId);
+          }}
+        />
+      )}
+
+      {askHowLong && (
+        <HowLongDialog
+          onCancel={() => setAskHowLong(null)}
+          onPick={(minutes) => {
+            const subtaskId = askHowLong;
+            setAskHowLong(null);
+            void handleSubtaskAction(subtaskId, { action: "complete", actualMin: minutes });
+          }}
+        />
+      )}
+
+      {wizardStart && (
+        <ProjectWizard
+          start={wizardStart}
+          onClose={() => setWizardStart(null)}
+          onCreated={(created) => void handleProjectCreated(created)}
+        />
+      )}
+
+      {detailProject && (
+        <ProjectDetail
+          view={detailProject}
+          disabled={projectsBusy}
+          onClose={() => setDetailProjectId(null)}
+          onComplete={(subtaskId, actualMin) => void handleSubtaskAction(subtaskId, { action: "complete", actualMin })}
+          onSkip={(subtaskId) => void handleSubtaskAction(subtaskId, { action: "skip" })}
+          onMoveDeadline={(id, deadline) => void handleMoveDeadline(id, deadline)}
+          onAddMinutes={(extra) => void handleAddMinutes(extra)}
+        />
+      )}
+
       {availabilityDialog && (
         <AvailabilityDialog
           mode={availabilityDialog}
@@ -794,6 +1009,8 @@ export function LifeOrganizerApp() {
               mode={editingTask ? "edit" : "create"}
               onCancel={handleCloseForm}
               onSubmitTask={editingTask ? handleUpdateTask : handleCreateTask}
+              canCreateProjects={plan !== "free"}
+              onStartProject={handleStartProject}
             />
           </div>
         </div>

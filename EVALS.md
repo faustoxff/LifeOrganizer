@@ -241,3 +241,29 @@ Cada uno está fijado como caso de regresión.
 6. **Falsa afirmación.** "Listo, agendado" / "he creado la tarea", cuando la
    tarea existe recién cuando el usuario confirma.
 7. **Tuteo.** "¿Quieres?", "tienes", en una app que es toda voseo.
+
+## Eval de proyectos (`npm run eval:projects`)
+
+Juzga la calidad de lo que hace la IA en el flujo de proyectos, contra los modelos de
+verdad. Igual que el de Milo, **no** entra en `npm test`: gasta dinero y depende de un
+tercero.
+
+```bash
+npm run eval:projects                        # los 5 casos
+npm run eval:projects -- --filter mudanza    # uno solo
+npm run eval:projects -- --provider ollama   # medir un provider puntual
+npm run eval:projects -- --transcript /tmp/proyectos   # guarda preguntas y subtareas
+```
+
+Los casos están en `evals/project-cases.ts`: un TP universitario con consigna, una mudanza,
+preparar un parcial, organizar un evento y un proyecto vago donde preguntar es lo correcto.
+Cada uno corre dos pruebas:
+
+- **Preguntas**: cuántas hace (rango razonable por caso), que cada una explique por qué,
+  que no se repitan y que al menos una toque lo que de verdad cambia el plan.
+- **Subtareas**: que pase la validación (DAG, 10-240 min), que la primera se pueda arrancar
+  hoy en ≤ 30 min sin dependencias, que ningún título sea vago ("Avanzar con el TP"), que haya
+  una revisión final y un entregable, que cubra el proyecto entero, que ninguna se lleve casi
+  todo el trabajo y que el scheduler, con la disponibilidad por defecto, lo haga entrar.
+
+Al final imprime cuántos tokens gastó la corrida, para estimar el costo de un plan.

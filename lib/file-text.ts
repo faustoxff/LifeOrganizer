@@ -1,4 +1,5 @@
 import "server-only";
+import { MAX_FILE_BYTES, MAX_FILES } from "@/lib/project-limits";
 
 /**
  * Extracción de texto de los archivos que se adjuntan a un proyecto.
@@ -7,13 +8,7 @@ import "server-only";
  * Lo único que persiste es un resumen (ver lib/context-summary.ts).
  */
 
-export const MAX_FILES = 3;
-/**
- * Por archivo. No son 10 MB: Vercel rechaza cualquier request de más de 4.5 MB
- * antes de que llegue a la función, así que un límite mayor solo produciría un 413
- * opaco. Se sube de a un archivo por request.
- */
-export const MAX_FILE_BYTES = 4 * 1024 * 1024;
+export { MAX_FILES, MAX_FILE_BYTES };
 /** Tope de texto que se conserva de un archivo antes de resumirlo. */
 export const MAX_TEXT_CHARS = 200_000;
 

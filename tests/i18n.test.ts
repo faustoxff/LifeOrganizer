@@ -49,6 +49,30 @@ describe("i18n", () => {
     }
   });
 
+  it("el flujo de proyectos está completo en los 13 idiomas, y los textos con parámetro lo usan", () => {
+    const project = (language: (typeof supportedLanguages)[number]) => copy[language].project;
+    const stringKeys = Object.keys(project("en")).filter((k) => typeof (project("en") as Record<string, unknown>)[k] === "string");
+    expect(stringKeys.length).toBeGreaterThanOrEqual(45);
+    for (const language of supportedLanguages) {
+      for (const key of stringKeys) {
+        const text = (project(language) as Record<string, unknown>)[key];
+        expect(typeof text, `${language}.project.${key}`).toBe("string");
+        expect((text as string).trim().length, `${language}.project.${key}`).toBeGreaterThan(0);
+      }
+      const p = project(language);
+      // Un texto con parámetro que ignora su parámetro es una traducción rota.
+      expect(p.optDate("2026-10-08"), language).toContain("2026-10-08");
+      expect(p.optExtra(35), language).toContain("35");
+      expect(p.shortfall(90), language).toContain("90");
+      expect(p.optTrim(40), language).toContain("40");
+      expect(p.extraApplied(20), language).toContain("20");
+      expect(p.tightAlert("Mi TP"), language).toContain("Mi TP");
+      expect(p.infeasibleAlert("Mi TP"), language).toContain("Mi TP");
+      expect(p.readingFile("consigna.pdf"), language).toContain("consigna.pdf");
+      expect(p.fileFailed("consigna.pdf"), language).toContain("consigna.pdf");
+    }
+  });
+
   it("los tres tipos se distinguen entre sí en cada idioma", () => {
     for (const language of supportedLanguages) {
       const kinds = Object.values(copy[language].taskForm.kinds);

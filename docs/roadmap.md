@@ -311,3 +311,25 @@ Crear un proyecto y todo lo que usa IA es Plus/Pro. Kinds nuevos en `lib/usage-l
 `project_intake` y `project_plan` (Free 0). Replanificar y avanzar un proyecto ya creado es
 determinista, no gasta IA y no se bloquea. Cada llamada de IA de proyectos guarda sus tokens
 en `ai_token_log` y los deja en el log del servidor.
+
+### Decisiones de la etapa 3
+
+- **Un archivo por request**: el asistente sube los archivos de a uno (`/api/projects/extract`),
+  cada uno con su parte del presupuesto de contexto. El resumen se guarda; el archivo no.
+- **`unpdf` y `mammoth`** se verificaron dentro del build de producción de Next, no solo en tests.
+- **Las opciones de un plan que no entra** salen del scheduler (`extraMinPerDay`,
+  `achievableDeadline`, faltante). "Más minutos por día" **se guarda en la disponibilidad
+  del usuario** al confirmar (sumado a cada día que ya tenía tiempo), y la pantalla lo dice;
+  "correr fecha" cambia `due_date` del proyecto; "recortar alcance" es borrar subtareas y
+  recalcular.
+- **Confirmar recalcula en el servidor** y nunca usa las sesiones que mande el cliente. Se puede
+  confirmar un plan que no entra (queda un aviso permanente), pero la pantalla lo muestra antes.
+- **Saltear = diferir a mañana** (`not_before`). Terminar la última subtarea termina el proyecto.
+- **Tope de 15 proyectos activos** por usuario, para todos los planes.
+- **Free**: el chip Proyecto queda bloqueado con enlace a /plans; ver y avanzar lo que ya existe
+  (completar, saltear, correr fecha) no se bloquea porque es determinista y no gasta IA.
+- **Racha**: un día con una subtarea de proyecto terminada cuenta (cliente y `/api/stats`).
+- **Las sesiones de proyecto compiten en la recomendación de IA** como tareas pendientes
+  (`session:<id>`), con prioridad alta si el plan viene TIGHT o INFEASIBLE.
+- **Duración de las llamadas**: `maxDuration = 60` en extract, intake y plan. Dividir un proyecto
+  grande puede tardar; el plan de Vercel Hobby limita a 60 s.
