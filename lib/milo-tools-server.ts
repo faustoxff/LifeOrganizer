@@ -5,7 +5,9 @@ import { loadProjectRecords } from "@/lib/projects-storage";
 import { patternsLoader } from "@/lib/user-history";
 import { getBusyBlocks } from "@/lib/busy-blocks-server";
 import { addDays } from "@/lib/recurrence";
-import { loadTasks } from "@/lib/storage";
+import { loadTasks, setTaskPinned } from "@/lib/storage";
+import { replanAll } from "@/lib/replan";
+import { normalizeText } from "@/lib/text-normalize";
 import { getAvailabilitySettings } from "@/lib/user-settings";
 
 /**
@@ -29,6 +31,33 @@ export function createToolContext(userId: string, today: string, now: Date, user
       save: (input) => saveFact(userId, input)
     },
     patterns,
+    // replan_now y pin_task HACEN el cambio (reversible): siempre para el usuario autenticado.
+    replan: {
+      async run({ skipToday }) {
+        const report = await replanAll(userId, today, { force: true, skipToday });
+        return {
+          moved: report.moved.map((m) => ({ title: m.title, from: m.from, to: m.to })),
+          conflicts: report.conflicts.map((c) => ({ title: c.title, dueDate: c.dueDate }))
+        };
+      }
+    },
+    pin: {
+      async find({ title, dueDate }) {
+        const tokens = normalizeText(title).split(/\s+/).filter((t) => t.length >= 2);
+        const tasks = await loadTasks(userId);
+        return tasks
+          .filter((t) => t.kind === "task" && !t.done && t.status !== "skipped")
+          .filter((t) => !dueDate || t.dueDate === dueDate)
+          .filter((t) => {
+            const haystack = normalizeText(t.title);
+            return tokens.length > 0 && tokens.every((token) => haystack.includes(token));
+          })
+          .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate, pinned: t.pinned === true }));
+      },
+      async set(id, pinned) {
+        return (await setTaskPinned(id, pinned, userId)) !== null;
+      }
+    },
     load() {
       cached ??= readScheduleData(userId, today, patterns);
       return cached;

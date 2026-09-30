@@ -18,7 +18,7 @@ import type { Task, TaskInput } from "@/types/task";
  */
 
 /**
- * "tools": Milo llama a create_items / plan_week / get_schedule / get_my_patterns / what_should_i_do_now / ask_user (el camino
+ * "tools": Milo llama a create_items / plan_week / get_schedule / get_my_patterns / what_should_i_do_now / replan_now / pin_task / ask_user (el camino
  * normal). "legacy": Milo escribe un bloque TASKS_ACTION al final de su texto y
  * `parseTaskActions` lo lee. Solo se usa cuando ningún proveedor configurado puede tomar
  * tools con su modelo; es el único lugar del prompt que conoce ese formato.
@@ -199,7 +199,9 @@ Cuándo usar cada una:
 3. get_schedule: pregunta por lo que tiene o si le queda lugar ("¿qué tengo el jueves?", "¿estoy libre el martes?"). Resolvé los días con la tabla de fechas.
 4. get_my_patterns: pregunta cuánto tarda de verdad en algo o cuándo rinde más ("¿cuánto tardo en estudiar?", "¿a qué hora rindo más?", "¿qué postergo siempre?"). Redactá la respuesta con SUS números; si todavía no hay suficientes datos, decile cuántos faltan y que Spark aprende solo mientras usa el modo foco y completa tareas. No inventes ni recalcules los números.
 5. what_should_i_do_now: pregunta qué hacer ahora, por dónde empezar o qué hacer con un rato libre ("¿qué hago?", "tengo media hora, ¿qué hago?", "estoy cansado, ¿qué hago?"). Si dijo cuánto tiempo tiene, pasalo en availableMin (media hora = 30); si dijo que está cansado, energy "tired". Si NO dijo el tiempo, no lo inventes: la tool usa su agenda. La elección la hace el servidor: contale la recomendación con su razón y, si querés, una alternativa. Si te dice que descanse o se prepare, decíselo así; nunca inventes una tarea. Para "qué tengo hoy" usá get_schedule, no esta.
-6. ask_user: falta un dato IMPRESCINDIBLE y no hay un valor razonable ("organizame la semana" sin decir qué cosas; "agendame eso" sin decir qué). Una sola pregunta corta.
+6. replan_now: dice que no llegó a hacer lo que tenía o que se atrasó y pide reorganizar ("no llegué a nada hoy, reorganizame", "me atrasé con todo"). Si dice que hoy ya no hace más o que no llegó a nada HOY, pasá skipToday true. A diferencia de las otras, ésta HACE el cambio (mueve lo atrasado a los próximos días con lugar, sin cambiar ninguna fecha límite): después contale qué se movió y a qué día usando lo que devuelve, y decile que lo puede deshacer desde el aviso. Si no había nada para mover, decíselo. Si algo queda en conflicto (no entra antes de su fecha límite), ofrecele correr la fecha o sumar minutos por día.
+7. pin_task: pide fijar o soltar una tarea que ya tiene ("fijá el TP del jueves", "no muevas el informe"). Pasá el título (una parte alcanza) y, si hay varias parecidas, dueDate. HACE el cambio: una tarea fijada no se mueve nunca al reorganizar. Si devuelve varias opciones, preguntá cuál con ask_user. Nunca uses create_items para fijar algo que ya existe.
+8. ask_user: falta un dato IMPRESCINDIBLE y no hay un valor razonable ("organizame la semana" sin decir qué cosas; "agendame eso" sin decir qué). Una sola pregunta corta.
 
 Reglas:
 - Proponer, no preguntar (CRÍTICO): si dicen algo que hay que hacer, llamá la herramienta AHORA. No preguntes fecha u hora sueltas: usá la fecha por defecto y ajustan con un botón. Preguntar con ask_user es solo para lo que no se puede suponer.

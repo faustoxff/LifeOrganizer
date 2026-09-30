@@ -196,7 +196,35 @@ export const WHAT_SHOULD_I_DO_NOW: ToolSpec = {
   }
 };
 
-export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS, WHAT_SHOULD_I_DO_NOW];
+export const REPLAN_NOW: ToolSpec = {
+  name: "replan_now",
+  description:
+    "Reacomoda AHORA lo que quedó pendiente: mueve las tareas atrasadas al próximo día con lugar (respetando su disponibilidad, sus compromisos y sus fechas límite, que NO cambia) y replanifica los proyectos. Usala cuando diga que no llegó a hacer lo que tenía, que se atrasó o pida reorganizar lo pendiente (\"no llegué a nada hoy, reorganizame\"). Con skipToday en true, lo que quedó para HOY también pasa a los próximos días (usalo si dijo que hoy ya no hace más). Esta tool HACE el cambio y el usuario lo puede deshacer: contale qué se movió. No mueve lo fijado, los recordatorios ni lo que ya venció.",
+  parameters: {
+    type: "object",
+    properties: {
+      skipToday: { type: "boolean", description: "true si dijo que hoy ya no hace nada más o que no llegó a nada hoy; lo pendiente de hoy pasa a mañana o después." }
+    },
+    required: []
+  }
+};
+
+export const PIN_TASK: ToolSpec = {
+  name: "pin_task",
+  description:
+    "Fija una tarea que el usuario ya tiene (\"fijá el TP del jueves\"): una tarea fijada NO se mueve nunca cuando se reorganiza. Con pinned en false la suelta. Buscala por el título; si hay varias parecidas, pasá dueDate (YYYY-MM-DD) para distinguirlas. Esta tool HACE el cambio. Si devuelve varias opciones, preguntale cuál con ask_user.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Parte del título de la tarea (por ejemplo \"TP\")." },
+      dueDate: { type: "string", description: "YYYY-MM-DD. Solo si hace falta distinguir entre varias." },
+      pinned: { type: "boolean", description: "true para fijarla (por defecto), false para soltarla." }
+    },
+    required: ["title"]
+  }
+};
+
+export const MILO_TOOLS: ToolSpec[] = [CREATE_ITEMS, PLAN_WEEK, GET_SCHEDULE, ASK_USER, REMEMBER_FACT, GET_MY_PATTERNS, WHAT_SHOULD_I_DO_NOW, REPLAN_NOW, PIN_TASK];
 
 /** Cuántos hechos puede tocar Milo en un mismo turno: un tope contra un modelo que "recuerda" todo. */
 export const MAX_FACT_CALLS_PER_TURN = 3;
@@ -241,7 +269,25 @@ export type FactsPort = {
   save: (input: { key: string; value: string; source: "stated"; confidence: 1 }) => Promise<{ status: "saved" | "exists_stated" | "limit" }>;
 };
 
+/** Lo que `replan_now` necesita del servidor, atado al usuario autenticado. */
+export type ReplanPort = {
+  run: (options: { skipToday: boolean }) => Promise<{
+    moved: { title: string; from: string; to: string }[];
+    conflicts: { title: string; dueDate: string }[];
+  }>;
+};
+
+export type PinCandidate = { id: string; title: string; dueDate: string; pinned: boolean };
+
+/** Lo que `pin_task` necesita del servidor, atado al usuario autenticado. */
+export type PinPort = {
+  find: (query: { title: string; dueDate?: string }) => Promise<PinCandidate[]>;
+  set: (id: string, pinned: boolean) => Promise<boolean>;
+};
+
 export type ToolContext = {
+  replan?: ReplanPort;
+  pin?: PinPort;
   /** Los patrones aprendidos del usuario autenticado (`lib/user-patterns.ts`). Se lee solo si se pide. */
   patterns?: () => Promise<UserPatterns>;
   /** El mensaje del usuario en este turno: `remember_fact` comprueba contra él que lo haya dicho. */
@@ -266,6 +312,8 @@ export type ToolEffect = {
   factSaved?: SavedFact;
   /** Un hecho deducido: espera la confirmación del usuario. */
   factProposal?: FactProposal;
+  /** La tool cambió tareas de verdad (replan_now, pin_task): el cliente tiene que recargarlas. */
+  tasksChanged?: boolean;
 };
 
 export type ToolOutcome = {
@@ -730,6 +778,63 @@ async function getMyPatterns(args: Record<string, unknown>, ctx: ToolContext): P
   });
 }
 
+const MOVED_LIST_MAX = 10;
+
+/**
+ * Reacomoda lo pendiente ahora. A diferencia de las tools que proponen, ésta HACE el cambio: es reversible (el
+ * usuario lo ve en un aviso con "Deshacer") y él lo pidió. Todo lo decide `lib/replan.ts`; Milo lo cuenta.
+ */
+async function replanNow(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!ctx.replan) return fail("No se puede reorganizar ahora.");
+  if (args.skipToday !== undefined && typeof args.skipToday !== "boolean") return fail("skipToday tiene que ser true o false.");
+  const result = await ctx.replan.run({ skipToday: args.skipToday === true });
+  const changed = result.moved.length > 0;
+  return ok(
+    {
+      movedCount: result.moved.length,
+      moved: result.moved.slice(0, MOVED_LIST_MAX),
+      ...(result.moved.length > MOVED_LIST_MAX ? { andMore: result.moved.length - MOVED_LIST_MAX } : {}),
+      conflicts: result.conflicts,
+      note: changed
+        ? "Ya está hecho: contale qué pasó a qué día. Las fechas límite no cambiaron y puede deshacer cada movimiento desde el aviso."
+        : "No había nada atrasado que mover. Decíselo así, sin inventar cambios.",
+      ...(result.conflicts.length > 0 ? { conflictNote: "Lo que está en conflicto no entra antes de su fecha límite: ofrecele correr la fecha o sumar minutos por día." } : {})
+    },
+    changed ? { tasksChanged: true } : undefined
+  );
+}
+
+/** Fija o suelta una tarea que ya existe. Si hay más de una parecida, no toca nada y devuelve las opciones. */
+async function pinTask(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!ctx.pin) return fail("No se puede fijar ahora.");
+  const title = typeof args.title === "string" ? args.title.trim() : "";
+  if (title.length < 2 || title.length > 120) return fail("title tiene que ser parte del título de la tarea (2 a 120 caracteres).");
+  if (args.dueDate !== undefined && args.dueDate !== null && (typeof args.dueDate !== "string" || !isDateKey(args.dueDate))) {
+    return fail("dueDate tiene que ser una fecha YYYY-MM-DD.");
+  }
+  if (args.pinned !== undefined && typeof args.pinned !== "boolean") return fail("pinned tiene que ser true o false.");
+  const pinned = args.pinned !== false;
+
+  const matches = await ctx.pin.find({ title, ...(typeof args.dueDate === "string" ? { dueDate: args.dueDate } : {}) });
+  if (matches.length === 0) {
+    return ok({ pinned: false, found: 0, note: "No encontré una tarea pendiente con ese nombre. Decíselo y preguntale cuál es." });
+  }
+  if (matches.length > 1) {
+    return ok({
+      pinned: false,
+      found: matches.length,
+      candidates: matches.slice(0, 5).map((m) => ({ title: m.title, dueDate: m.dueDate })),
+      note: "Hay más de una parecida y no toqué nada. Preguntale cuál con ask_user."
+    });
+  }
+  const [match] = matches;
+  if (!(await ctx.pin.set(match.id, pinned))) return fail("No se pudo cambiar esa tarea.");
+  return ok(
+    { pinned, title: match.title, dueDate: match.dueDate, note: pinned ? "Listo, quedó fijada: la reorganización no la mueve." : "Listo, la soltó: ahora se puede reorganizar." },
+    { tasksChanged: true }
+  );
+}
+
 const MAX_AVAILABLE_MIN = 24 * 60;
 const OPTIONS_MAX = 3;
 
@@ -823,6 +928,10 @@ export async function executeTool(call: ToolCall, ctx: ToolContext): Promise<Too
         return await getMyPatterns(args, ctx);
       case "what_should_i_do_now":
         return await whatShouldIDoNow(args, ctx);
+      case "replan_now":
+        return await replanNow(args, ctx);
+      case "pin_task":
+        return await pinTask(args, ctx);
       case "plan_week": {
         const request = readPlanRequest(args, ctx);
         return "content" in request ? request : planWeekTool(request, ctx, await ctx.load());

@@ -1,5 +1,6 @@
 import "server-only";
 import sql from "@/lib/db";
+import { isDateKey } from "@/lib/recurrence";
 import { normalizeTask } from "@/lib/storage";
 import type { PlannedMove } from "@/lib/task-replan";
 import type { Task } from "@/types/task";
@@ -17,6 +18,7 @@ export type StoredMove = { id: string; taskId: string; title: string; from: stri
  * sacar: si dos pedidos corren a la vez, el segundo no encuentra nada que mover (no duplica ni suma dos veces).
  */
 export async function applyPlannedMove(userId: string, move: PlannedMove, today: string): Promise<boolean> {
+  if (!isDateKey(move.from) || !isDateKey(move.to) || !isDateKey(today)) return false;
   const rows = await sql`
     WITH prev AS (
       SELECT id, planned_on, postponed_count FROM tasks
@@ -109,13 +111,14 @@ export async function undoPlannedMove(userId: string, moveId: string): Promise<T
 
 /** Un recordatorio o una tarea con hora vencida: pasarla a otro día. Cuenta la postergación y limpia lo planificado. */
 export async function moveFixedToDate(userId: string, taskId: string, dueDate: string): Promise<boolean> {
+  if (!isDateKey(dueDate)) return false;
   const rows = await sql`
     UPDATE tasks
     SET postponed_count = postponed_count + CASE WHEN ${dueDate} > due_date THEN 1 ELSE 0 END,
         last_postponed_at = CASE WHEN ${dueDate} > due_date THEN NOW() ELSE last_postponed_at END,
         due_date = ${dueDate}, planned_on = NULL, replan_conflict = FALSE
     WHERE id = ${taskId} AND user_id = ${userId} AND done = FALSE AND status = 'pending'
-      AND ${dueDate} ~ '^\\\\d{4}-\\\\d{2}-\\\\d{2}$'
+      AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
     RETURNING id
   `;
   return rows.length > 0;
@@ -133,12 +136,13 @@ export async function dismissTask(userId: string, taskId: string): Promise<boole
 
 /** Corre la fecha límite de una tarea suelta a un día posterior (la opción de un conflicto). */
 export async function extendDeadline(userId: string, taskId: string, dueDate: string): Promise<boolean> {
+  if (!isDateKey(dueDate)) return false;
   const rows = await sql`
     UPDATE tasks
     SET due_date = ${dueDate}, replan_conflict = FALSE
     WHERE id = ${taskId} AND user_id = ${userId} AND done = FALSE AND status = 'pending'
       AND kind = 'task' AND series_id IS NULL AND ${dueDate} > due_date
-      AND ${dueDate} ~ '^\\\\d{4}-\\\\d{2}-\\\\d{2}$'
+      AND ${dueDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'
     RETURNING id
   `;
   return rows.length > 0;

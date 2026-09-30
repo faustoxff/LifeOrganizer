@@ -120,10 +120,13 @@ function buildDailyBriefing(tasks: Task[], miloCopy: MiloCopy): string {
 
 export function MiloChat({
   tasks,
-  onCreateTask
+  onCreateTask,
+  onTasksChanged
 }: {
   tasks: Task[];
   onCreateTask: (input: TaskInput) => Promise<boolean>;
+  /** Milo reacomodó o fijó tareas (replan_now, pin_task): hay que recargarlas. */
+  onTasksChanged?: () => void;
 }) {
   const { copy, language } = useAppLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -229,7 +232,9 @@ export function MiloChat({
         proposal?: WeekProposal | null;
         factsSaved?: SavedFact[];
         factProposals?: FactProposal[];
+        tasksChanged?: boolean;
       };
+      if (data.tasksChanged) onTasksChanged?.();
 
       const hasActions = Boolean(data.taskActions && data.taskActions.length > 0);
       const newMessage: Message = {

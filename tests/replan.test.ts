@@ -152,6 +152,33 @@ describe("replanAll", () => {
   });
 });
 
+describe("'no llegué a nada hoy' (skipToday)", () => {
+  it("lo planificado para hoy también se reacomoda, desde mañana, sin tocar la fecha límite", async () => {
+    const t = mk("hoy", { plannedOn: TODAY, dueDate: d(4), estimateMin: 30 });
+    const { deps, state } = memory([t]);
+    const normal = await replanAllWith(deps, "u1", TODAY, { force: true });
+    expect(normal.moved).toEqual([]); // sin skipToday, lo de hoy es de hoy
+    const report = await replanAllWith(deps, "u1", TODAY, { force: true, skipToday: true });
+    expect(report.moved).toEqual([{ taskId: "hoy", title: "hoy", from: TODAY, to: d(1) }]);
+    expect(t.dueDate).toBe(d(4));
+    expect(t.postponedCount).toBe(1);
+    expect(state.projectRuns).toBe(2);
+  });
+
+  it("lo que vence hoy no se mueve (ya venció mañana): queda", async () => {
+    const t = mk("vence", { plannedOn: TODAY, dueDate: TODAY });
+    const { deps } = memory([t]);
+    expect((await replanAllWith(deps, "u1", TODAY, { force: true, skipToday: true })).moved).toEqual([]);
+  });
+
+  it("los proyectos se replanifican desde mañana", async () => {
+    const { deps } = memory([]);
+    const spy = vi.spyOn(deps, "replanProjects");
+    await replanAllWith(deps, "u1", TODAY, { force: true, skipToday: true });
+    expect(spy).toHaveBeenCalledWith("u1", d(1));
+  });
+});
+
 describe("ocurrencias de series que no se hicieron", () => {
   const series: SeriesRecord = {
     id: "s1", userId: "u1", kind: "task", title: "Gimnasio", category: "x", description: "", priority: "medium",

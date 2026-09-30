@@ -53,17 +53,29 @@ export type ReplanReport = {
   conflicts: ReplanConflict[];
 };
 
+export type ReplanOptions = {
+  /** Corre aunque ya haya corrido hoy (cambio grande, o el usuario lo pidió). */
+  force?: boolean;
+  /**
+   * "Hoy ya no hago nada más": lo que quedó planificado para hoy también se reacomoda, desde mañana. Los proyectos
+   * también se replanifican desde mañana.
+   */
+  skipToday?: boolean;
+};
+
 export async function replanAllWith(
   deps: ReplanDeps,
   userId: string,
   today: string,
-  options: { force?: boolean } = {}
+  options: ReplanOptions = {}
 ): Promise<ReplanReport> {
   if (!options.force && (await deps.getReplannedOn(userId)) === today) return { ran: false, moved: [], conflicts: [] };
 
-  const context = await deps.loadContext(userId, today);
+  // Con skipToday, "atrasado" incluye lo de hoy: el reloj del replan corre desde mañana.
+  const planDay = options.skipToday ? addDays(today, 1) : today;
+  const context = await deps.loadContext(userId, planDay);
   const plan = planOverdueTasks({
-    today,
+    today: planDay,
     tasks: context.tasks,
     availability: context.availability,
     overrides: context.overrides,
@@ -78,7 +90,7 @@ export async function replanAllWith(
   await deps.setConflicts(userId, plan.conflicts.map((c) => c.taskId), plan.resolved);
 
   // Los proyectos, con las tareas ya en su día nuevo. Si fallan, lo de las tareas ya quedó hecho.
-  await deps.replanProjects(userId, today);
+  await deps.replanProjects(userId, planDay);
   await deps.markReplanned(userId, today);
   return { ran: true, moved, conflicts: plan.conflicts };
 }
@@ -126,7 +138,7 @@ const realDeps: ReplanDeps = {
 };
 
 /** Replanifica todo lo del usuario. `today` es el suyo (en su zona). */
-export function replanAll(userId: string, today: string, options: { force?: boolean } = {}): Promise<ReplanReport> {
+export function replanAll(userId: string, today: string, options: ReplanOptions = {}): Promise<ReplanReport> {
   return replanAllWith(realDeps, userId, today, options);
 }
 

@@ -222,6 +222,29 @@ describe("agenda ocupada (etapa 7)", () => {
   });
 });
 
+describe("replanificación (etapa 8)", () => {
+  it("cada consulta de replan-storage compara user_id con el usuario que se le pasa", () => {
+    const queries = read("lib/replan-storage.ts").match(/sql`[\s\S]*?`/g) ?? [];
+    expect(queries.length).toBeGreaterThanOrEqual(9);
+    for (const query of queries) expect(query, `consulta sin dueño:\n${query}`).toMatch(/user_id\s*=\s*\$\{userId\}/);
+  });
+
+  it("la ruta de replan autentica antes de leer y no toma un userId del cuerpo", () => {
+    const source = read("app/api/replan/route.ts");
+    for (const handler of source.split(/export async function /).slice(1)) {
+      expect(handler).toMatch(/^[A-Z]+\((request: Request)?\)\s*\{\s*let userId: string;\s*try \{ userId = await requireAuth\(\); \}/);
+    }
+    expect(source).not.toMatch(/body\.userId|body\.user_id/);
+  });
+
+  it("las tools de Milo que cambian tareas (replan, fijar) se atan al usuario en un solo lugar", () => {
+    const source = read("lib/milo-tools-server.ts");
+    expect(source).toMatch(/replanAll\(userId,/);
+    expect(source).toMatch(/setTaskPinned\(id, pinned, userId\)/);
+    expect(source).toMatch(/loadTasks\(userId\)/);
+  });
+});
+
 describe("server-side AI caches", () => {
   it("include the user in the cache key", () => {
     // These Maps live in the server process and are shared by every request.

@@ -26,6 +26,7 @@ export const DEFAULT_PROPOSAL_TEXT = "Te dejo esta propuesta para que la confirm
 export const DEFAULT_ITEMS_TEXT = "Te dejo esto para que lo confirmes. Si querés cambiar algo, decime.";
 export const DEFAULT_EMPTY_TEXT = "No pude armar la respuesta. ¿Me lo repetís?";
 export const DEFAULT_FACT_TEXT = "Anotado, lo tengo en cuenta.";
+export const DEFAULT_CHANGED_TEXT = "Listo, ya lo reacomodé. Lo ves en el aviso de arriba y podés deshacerlo.";
 export const DEFAULT_FACT_PROPOSAL_TEXT = "¿Querés que me acuerde de eso? Confirmalo abajo.";
 
 export type AgentParams = {
@@ -48,6 +49,8 @@ export type AgentResult = {
   factsSaved: SavedFact[];
   /** Datos que Milo dedujo: esperan la confirmación del usuario, no están guardados. */
   factProposals: FactProposal[];
+  /** replan_now o pin_task cambiaron tareas: el cliente las tiene que recargar. */
+  tasksChanged: boolean;
   /** Nombres de las tools que se ejecutaron, en orden. Para logs y evals. */
   toolsUsed: string[];
   /** Lo mismo con los argumentos que mandó el modelo (para evals: ¿pasó el tiempo que dijo el usuario?). */
@@ -79,6 +82,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
   let proposal: WeekProposal | null = null;
   const factsSaved: SavedFact[] = [];
   const factProposals: FactProposal[] = [];
+  let tasksChanged = false;
   const toolsUsed: string[] = [];
   const toolCalls: { name: string; arguments: string }[] = [];
   let provider = "";
@@ -88,11 +92,12 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
   let rounds = 0;
 
   const done = (text: string): AgentResult => ({
-    text: text.trim() || fallbackText(taskActions, proposal, factsSaved, factProposals),
+    text: text.trim() || fallbackText(taskActions, proposal, factsSaved, factProposals, tasksChanged),
     taskActions,
     proposal,
     factsSaved,
     factProposals,
+    tasksChanged,
     toolsUsed,
     toolCalls,
     rounds,
@@ -116,7 +121,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
       });
     } catch (error) {
       // Si ya se propuso algo, eso vale más que un error: se devuelve con un texto por defecto.
-      if (round > 1 && (taskActions.length > 0 || proposal || factsSaved.length > 0 || factProposals.length > 0)) {
+      if (round > 1 && (taskActions.length > 0 || proposal || factsSaved.length > 0 || factProposals.length > 0 || tasksChanged)) {
         console.warn(`[milo] round ${round} failed after a proposal, returning it as is`, error);
         return done("");
       }
@@ -130,7 +135,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
       let text = response.content;
       // Un modelo que se quedó sin presupuesto pensando devuelve vacío. Un reintento en otro
       // proveedor lo arregla casi siempre; si ya hay una propuesta no hace falta.
-      if (text.trim() === "" && taskActions.length === 0 && !proposal && factsSaved.length === 0 && factProposals.length === 0) {
+      if (text.trim() === "" && taskActions.length === 0 && !proposal && factsSaved.length === 0 && factProposals.length === 0 && !tasksChanged) {
         text = await retryEmpty(deps, { messages, tier, timeoutMs }, response.provider);
       }
       return done(stripTaskBlock(text));
@@ -148,6 +153,7 @@ export async function runMiloAgent(params: AgentParams, deps: AgentDeps = realDe
 
       const effect = outcome.effect;
       if (effect?.ask) asked = effect.ask;
+      if (effect?.tasksChanged) tasksChanged = true;
       if (effect?.factSaved && !factsSaved.some((f) => f.key === effect.factSaved!.key)) factsSaved.push(effect.factSaved);
       if (effect?.factProposal && !factProposals.some((f) => f.key === effect.factProposal!.key)) factProposals.push(effect.factProposal);
       if (effect?.proposal) {
@@ -186,12 +192,14 @@ function fallbackText(
   taskActions: TaskInput[],
   proposal: WeekProposal | null,
   factsSaved: SavedFact[],
-  factProposals: FactProposal[]
+  factProposals: FactProposal[],
+  tasksChanged = false
 ): string {
   if (proposal) return DEFAULT_PROPOSAL_TEXT;
   if (taskActions.length > 0) return DEFAULT_ITEMS_TEXT;
   if (factProposals.length > 0) return DEFAULT_FACT_PROPOSAL_TEXT;
   if (factsSaved.length > 0) return DEFAULT_FACT_TEXT;
+  if (tasksChanged) return DEFAULT_CHANGED_TEXT;
   return DEFAULT_EMPTY_TEXT;
 }
 

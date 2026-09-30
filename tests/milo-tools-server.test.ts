@@ -12,7 +12,8 @@ const loadProjectRecords = vi.fn();
 const loadHistory = vi.fn();
 const getAvailabilitySettings = vi.fn();
 
-vi.mock("@/lib/storage", () => ({ loadTasks: (...a: unknown[]) => loadTasks(...a) }));
+vi.mock("@/lib/storage", () => ({ loadTasks: (...a: unknown[]) => loadTasks(...a), setTaskPinned: vi.fn() }));
+vi.mock("@/lib/replan", () => ({ replanAll: vi.fn() }));
 vi.mock("@/lib/projects-storage", () => ({ loadProjectRecords: (...a: unknown[]) => loadProjectRecords(...a) }));
 // El loader real lee la base; acá se reemplaza por uno que arma los patrones con el historial del test.
 vi.mock("@/lib/user-history", async () => {

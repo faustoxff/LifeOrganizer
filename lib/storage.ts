@@ -2,6 +2,7 @@ import "server-only";
 import sql from "@/lib/db";
 import { durationFromMinutes, isValidEstimate } from "@/lib/task-estimate";
 import { normalizeSteps } from "@/lib/task-steps";
+import { isDateKey } from "@/lib/recurrence";
 import { readTaskChecklist } from "@/lib/checklist";
 import { Task, TaskKind, TaskStatus } from "@/types/task";
 
@@ -166,6 +167,8 @@ export async function addTaskProgress(taskId: string, minutes: number, userId: s
  * la replanificación para mover algo sin editarlo. Devuelve null si la tarea no existe o no es del usuario.
  */
 export async function moveTaskPlannedDate(taskId: string, plannedOn: string, userId: string): Promise<Task | null> {
+  // Se valida acá y no solo en SQL: Postgres convierte el parámetro a fecha antes de mirar el WHERE.
+  if (!isDateKey(plannedOn)) return null;
   const rows = await sql`
     UPDATE tasks
     SET postponed_count = postponed_count

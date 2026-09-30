@@ -119,6 +119,7 @@ export async function POST(request: Request) {
     let proposal: WeekProposal | null = null;
     let factsSaved: SavedFact[] = [];
     let factProposals: FactProposal[] = [];
+    let tasksChanged = false;
     let viaTools = false;
 
     // Milo llama tools cuando alguien puede crear y algún proveedor las soporta. Sin eso
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
         proposal = result.proposal;
         factsSaved = result.factsSaved;
         factProposals = result.factProposals;
+        tasksChanged = result.tasksChanged;
         viaTools = true;
         console.info(
           `[milo] user=${userId} tools=[${result.toolsUsed.join(", ")}] rounds=${result.rounds} via=${result.provider}`
@@ -185,7 +187,9 @@ export async function POST(request: Request) {
       proposal: canCreateTasks ? proposal : null,
       // Lo que Milo guardó (lo dijo el usuario) y lo que propone guardar (espera confirmación).
       factsSaved: canCreateTasks ? factsSaved : [],
-      factProposals: canCreateTasks ? factProposals : []
+      factProposals: canCreateTasks ? factProposals : [],
+      // replan_now / pin_task hicieron cambios: el cliente recarga sus tareas.
+      tasksChanged: canCreateTasks && tasksChanged
     });
   } catch (error) {
     // Groq's plan allows 200k tokens per day for the whole account, so a budget
