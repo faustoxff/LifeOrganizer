@@ -12,7 +12,9 @@ export type UsageKind =
   | "stats_blurb"
   | "transcribe"
   | "project_intake"
-  | "project_plan";
+  | "project_plan"
+  | "checklist_detect"
+  | "checklist_generate";
 
 // Max AI calls per user per day (UTC), by plan. Tune these as costs become clear.
 export const DAILY_LIMITS: Record<UsageKind, Record<UserPlan, number>> = {
@@ -32,7 +34,11 @@ export const DAILY_LIMITS: Record<UsageKind, Record<UserPlan, number>> = {
   // budget); a plan is the expensive one — a large prompt on the `planner` tier,
   // possibly twice when the first answer is invalid — so it gets the tighter number.
   project_intake: { free: 0, plus: 15, pro: 40 },
-  project_plan: { free: 0, plus: 6, pro: 20 }
+  project_plan: { free: 0, plus: 6, pro: 20 },
+  // Checklists son Plus/Pro. Detectar es una llamada por lote de títulos (barata); armar una lista
+  // inicial es una por actividad nueva: la lista se guarda y las ocurrencias siguientes la reusan.
+  checklist_detect: { free: 0, plus: 10, pro: 30 },
+  checklist_generate: { free: 0, plus: 20, pro: 60 }
 };
 
 // Hard cap on stored tasks for any plan (free is further limited in the tasks route).

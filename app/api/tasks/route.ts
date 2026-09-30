@@ -25,6 +25,8 @@ import {
   type FollowingResult,
   type OccurrenceChanges
 } from "@/lib/series";
+import { checklistStore } from "@/lib/checklists-runtime";
+import { learnFromCompletion } from "@/lib/checklists-service";
 import { ruleFromRepeat } from "@/lib/recurrence";
 import { getTodayInTimeZone } from "@/lib/task-date";
 import { parseScope, parseTaskPayload } from "@/lib/task-validation";
@@ -198,6 +200,15 @@ export async function PATCH(request: Request) {
 
   try {
     const updated = await setTaskDone(body.taskId, body.done, userId);
+    if (body.done) {
+      // Completar una tarea con checklist es lo que enseña qué se usa y qué no. Es un plus:
+      // nunca puede ser la razón por la que completar falle.
+      try {
+        await learnFromCompletion(userId, body.taskId, { store: checklistStore, now: () => new Date() });
+      } catch (error) {
+        console.warn("[checklists] learning from completion failed", error);
+      }
+    }
     return NextResponse.json({ task: updated });
   } catch (err) {
     console.error("setTaskDone failed", err);

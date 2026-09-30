@@ -43,6 +43,8 @@ export interface TaskChecklist {
   weather: Weather | null;
   season: Season | null;
   generatedAt: string;
+  /** Cuándo se aprendió de esta ocurrencia. Sin esto, tildar/destildar "hecho" contaría dos veces. */
+  learnedAt?: string;
 }
 
 export const MAX_ITEMS_SHOWN = 10;
@@ -169,7 +171,8 @@ export function readTaskChecklist(raw: unknown): TaskChecklist | null {
     items: items.slice(0, MAX_ITEMS_STORED),
     weather: WEATHERS.includes(value.weather as Weather) ? (value.weather as Weather) : null,
     season: SEASONS.includes(value.season as Season) ? (value.season as Season) : null,
-    generatedAt: typeof value.generatedAt === "string" ? value.generatedAt : new Date(0).toISOString()
+    generatedAt: typeof value.generatedAt === "string" ? value.generatedAt : new Date(0).toISOString(),
+    ...(typeof value.learnedAt === "string" ? { learnedAt: value.learnedAt } : {})
   };
 }
 

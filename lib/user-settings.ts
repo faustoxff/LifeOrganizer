@@ -106,3 +106,28 @@ export async function markProjectsReplanned(userId: string, today: string): Prom
     ON CONFLICT (user_id) DO UPDATE SET projects_replanned_on = EXCLUDED.projects_replanned_on
   `;
 }
+
+// --- Ubicación aproximada (solo para el clima) -----------------------------------------
+
+export type ApproxLocation = { lat: number; lon: number };
+
+export async function getApproxLocation(userId: string): Promise<ApproxLocation | null> {
+  const rows = await sql`SELECT approx_lat, approx_lon FROM user_settings WHERE user_id = ${userId}`;
+  const row = rows[0];
+  if (!row || typeof row.approx_lat !== "number" || typeof row.approx_lon !== "number") return null;
+  return { lat: row.approx_lat, lon: row.approx_lon };
+}
+
+/** Guarda la ubicación ya redondeada a 0,1° (quien llama la redondea). Upsert, sin pisar la zona. */
+export async function saveApproxLocation(userId: string, location: ApproxLocation): Promise<void> {
+  await sql`
+    INSERT INTO user_settings (user_id, approx_lat, approx_lon, updated_at)
+    VALUES (${userId}, ${location.lat}, ${location.lon}, NOW())
+    ON CONFLICT (user_id) DO UPDATE
+      SET approx_lat = ${location.lat}, approx_lon = ${location.lon}, updated_at = NOW()
+  `;
+}
+
+export async function clearApproxLocation(userId: string): Promise<void> {
+  await sql`UPDATE user_settings SET approx_lat = NULL, approx_lon = NULL, updated_at = NOW() WHERE user_id = ${userId}`;
+}

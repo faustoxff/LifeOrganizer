@@ -2,6 +2,7 @@ import "server-only";
 import sql from "@/lib/db";
 import { durationFromMinutes, isValidEstimate } from "@/lib/task-estimate";
 import { normalizeSteps } from "@/lib/task-steps";
+import { readTaskChecklist } from "@/lib/checklist";
 import { Task, TaskKind, TaskStatus } from "@/types/task";
 
 /**
@@ -29,13 +30,14 @@ type TaskRow = {
   occurrence_date: string | null;
   status: TaskStatus;
   daily_cap_min: number | null;
+  checklist?: unknown;
 };
 
 export async function loadTasks(userId: string): Promise<Task[]> {
   const rows = await sql`
     SELECT id, user_id, title, category, description, priority, estimate_min, due_date,
            done, completed_at, steps, kind, remind_at, series_id,
-           occurrence_date::text AS occurrence_date, status, daily_cap_min
+           occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
     FROM tasks
     WHERE user_id = ${userId}
     ORDER BY created_at DESC
@@ -54,7 +56,7 @@ export async function createTask(task: Task, userId: string): Promise<Task> {
             ${task.kind === "project" ? (task.dailyCapMin ?? null) : null})
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
   `;
   const created = normalizeTask(rows[0]);
   if (!created) throw new Error("Failed to create task.");
@@ -86,7 +88,7 @@ export async function updateTask(task: Task, userId: string): Promise<Task | nul
       AND (series_id IS NULL OR ${task.kind} <> 'project')
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
   `;
   return normalizeTask(rows[0]);
 }
@@ -99,7 +101,7 @@ export async function setTaskDone(taskId: string, done: boolean, userId: string)
     WHERE id = ${taskId} AND user_id = ${userId}
     RETURNING id, user_id, title, category, description, priority, estimate_min, due_date,
               done, completed_at, steps, kind, remind_at, series_id,
-              occurrence_date::text AS occurrence_date, status, daily_cap_min
+              occurrence_date::text AS occurrence_date, status, daily_cap_min, checklist
   `;
   const updated = normalizeTask(rows[0]);
   if (!updated) throw new Error("Failed to toggle task.");
@@ -165,6 +167,7 @@ export function normalizeTask(row: unknown): Task | null {
       ...(r.series_id ? { seriesId: r.series_id } : {}),
       ...(r.occurrence_date ? { occurrenceDate: r.occurrence_date } : {}),
       ...(typeof r.daily_cap_min === "number" && r.kind === "project" ? { dailyCapMin: r.daily_cap_min } : {}),
+      ...(readTaskChecklist(r.checklist) ? { checklist: readTaskChecklist(r.checklist)! } : {}),
       steps: normalizeSteps(r.steps)
     };
   }
