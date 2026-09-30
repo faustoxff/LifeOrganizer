@@ -8,7 +8,7 @@ incomodidad.
 ## Correr
 
 ```bash
-npm run eval:milo                          # 62 casos × 2 modelos
+npm run eval:milo                          # 65 casos × 2 modelos
 npm run eval:milo -- --model default       # solo qwen (la mitad del costo)
 npm run eval:milo -- --filter recurrencia  # un subconjunto
 npm run eval:milo -- --repeat 5            # buscar casos intermitentes
@@ -42,6 +42,7 @@ CLI a `EVAL_*` y ahí está la única fuente de verdad.
 | `agenda` | "¿qué tengo el jueves?" contesta con lo que hay, sin proponer nada |
 | `cambio` | mover o sacar un ítem de una propuesta pendiente |
 | `ahora` | `what_should_i_do_now`: usarla ante "¿qué hago?", pasar `availableMin` solo si el usuario dijo el tiempo ("media hora" = 30, nunca inventarlo), `energy: tired` solo si dijo que está cansado, nombrar el evento cercano y no inventar tareas cuando no hay nada pendiente |
+| `replan` | `replan_now` cuando dice que se atrasó (con `skipToday: true` solo si dijo que hoy ya no hace más) y `pin_task` para fijar una tarea que ya existe, sin crear otra. Estas dos tools HACEN el cambio |
 | `memoria` | guardar lo que el usuario dice de sí mismo (que es despistado, cuándo rinde) y **no** guardar salud, dinero, documentos ni un plan de pasada |
 | `comfort` | largo de la respuesta, planes gigantes |
 | `regresion` | los bugs que este harness encontró, para que no vuelvan |

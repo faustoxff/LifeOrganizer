@@ -54,6 +54,30 @@ beforeEach(() => {
   getAvailabilitySettings.mockResolvedValue({ availability: DEFAULT_AVAILABILITY, overrides: {}, configured: true });
 });
 
+describe("pin_task: cómo se busca la tarea", () => {
+  const withTasks = (tasks: unknown[]) => {
+    loadTasks.mockResolvedValue(tasks);
+    return createToolContext("user_A", "2026-09-28", NOW).pin!;
+  };
+  const t = (id: string, title: string, over: Record<string, unknown> = {}) => ({ id, title, kind: "task", done: false, status: "pending", dueDate: "2026-10-01", ...over });
+
+  it("busca solo entre las tareas pendientes del usuario, sin importar mayúsculas ni acentos", async () => {
+    const pin = withTasks([t("1", "Entregar TP de álgebra"), t("2", "TP terminado", { done: true }), t("3", "TP saltado", { status: "skipped" }), t("4", "Recordar TP", { kind: "reminder" })]);
+    expect((await pin.find({ title: "tp algebra" })).map((m) => m.id)).toEqual(["1"]);
+    expect(loadTasks).toHaveBeenCalledWith("user_A");
+  });
+
+  it("el día distingue entre varias parecidas", async () => {
+    const pin = withTasks([t("1", "TP álgebra", { dueDate: "2026-10-01" }), t("2", "TP física", { dueDate: "2026-10-03" })]);
+    expect(await pin.find({ title: "TP" })).toHaveLength(2);
+    expect((await pin.find({ title: "TP", dueDate: "2026-10-03" })).map((m) => m.id)).toEqual(["2"]);
+  });
+
+  it("sin coincidencias, nada", async () => {
+    expect(await withTasks([t("1", "Informe")]).find({ title: "TP" })).toEqual([]);
+  });
+});
+
 describe("createToolContext", () => {
   it("cada lectura recibe el usuario autenticado y nada más", async () => {
     const ctx = createToolContext("user_A", "2026-09-28", NOW);

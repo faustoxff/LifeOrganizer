@@ -36,6 +36,8 @@ import { useUserPlan } from "@/lib/use-user-plan";
 import { AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useNow, type NowSession } from "@/lib/use-now";
+import { ReplanNotice } from "@/components/replan-notice";
+import { useReplan } from "@/lib/use-replan";
 import type { ProjectView } from "@/types/project";
 import { Task, TaskInput, TaskStep } from "@/types/task";
 
@@ -234,6 +236,27 @@ export function LifeOrganizerApp() {
   }
 
   const today = getTodayDateValue();
+
+  // El aviso del replan diario (una vez por día, al cargar las tareas): qué se reacomodó y cómo deshacerlo.
+  const replan = useReplan({ enabled: isLoaded, onChanged: reloadTasks });
+
+  /** Fija o suelta una tarea: una fijada no se mueve nunca en la replanificación. */
+  async function handleTogglePin(taskId: string, pinned: boolean) {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, pinned } : t)));
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, pinned })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { task: Task };
+      setTasks((prev) => prev.map((t) => (t.id === data.task.id ? data.task : t)));
+    } catch (err) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, pinned: !pinned } : t)));
+      setStorageError(getErrorMessage(err, copy.errors.unexpected));
+    }
+  }
 
   // A skipped occurrence is history nobody needs to see: it is out of the
   // calendar, the list, the counts and the AI, but its day still counts for the
@@ -835,7 +858,15 @@ export function LifeOrganizerApp() {
           )}
         >
           <div className="flex w-full lg:w-[360px] lg:flex-shrink-0">
-            <MiloChat tasks={todayTasks} onCreateTask={handleCreateTask} />
+            <MiloChat
+              tasks={todayTasks}
+              onCreateTask={handleCreateTask}
+              onTasksChanged={() => {
+                // Milo reacomodó o fijó algo (replan_now / pin_task): se recargan las tareas y el aviso.
+                void reloadTasks();
+                void replan.refresh();
+              }}
+            />
           </div>
         </div>
 
@@ -844,6 +875,21 @@ export function LifeOrganizerApp() {
           <CalendarView
             allTasks={visibleTasks}
             isMutating={isSyncing}
+            topSlot={
+              <ReplanNotice
+                api={replan}
+                tasks={visibleTasks}
+                today={today}
+                onSplit={(taskId) => void handleBreakDown(taskId)}
+                onLowerPriority={(taskId) => {
+                  const task = tasks.find((t) => t.id === taskId);
+                  if (task) void persistTask({ ...task, priority: "low" });
+                }}
+                onDelete={(taskId) => void handleDeleteTask(taskId)}
+              />
+            }
+            onPin={(taskId, pinned) => void handleTogglePin(taskId, pinned)}
+            onResolveConflict={(input) => void replan.resolveConflict(input)}
             now={now}
             onStartSession={(subtaskId) => {
               const item = todaySessions.find((entry) => entry.subtask.id === subtaskId);

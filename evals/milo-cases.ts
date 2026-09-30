@@ -116,7 +116,9 @@ export type Expectation = {
 
   // ---- Solo camino de tools. En el modo legacy estos chequeos se saltean. ----
   /** Esta tool tiene que haberse usado (y se ejecutó sin error). */
-  tool?: "create_items" | "plan_week" | "get_schedule" | "ask_user" | "what_should_i_do_now";
+  tool?: "create_items" | "plan_week" | "get_schedule" | "ask_user" | "what_should_i_do_now" | "replan_now" | "pin_task";
+  /** Chequeo libre de los argumentos que mandó el modelo a `tool`. Devuelve el problema, o null si está bien. */
+  toolCheck?: (args: Record<string, unknown>) => string | null;
   /**
    * Con `what_should_i_do_now`: qué argumentos tiene que haber mandado. `"absent"` = no puede
    * inventar el dato (si el usuario no dijo cuánto tiempo tiene, no se pasa availableMin).
@@ -554,6 +556,47 @@ export const CASES: EvalCase[] = [
     message: "¿qué hago ahora?",
     tasks: [],
     expectation: { tasks: "none", tool: "what_should_i_do_now", nowArgs: { availableMin: "absent", energy: "absent" }, maxChars: 400 },
+    toolsOnly: true
+  },
+
+
+  // ------------------------------------------------------------------ replan y fijar
+  // replan_now y pin_task HACEN el cambio (a diferencia de las que proponen): Milo tiene que usarlas cuando se
+  // lo piden, con los argumentos justos, y no crear tareas nuevas para algo que ya existe.
+  {
+    name: "replan: no llegué a nada hoy",
+    message: "no llegué a hacer nada hoy, reorganizame lo que quedó",
+    tasks: sampleTasks(),
+    expectation: {
+      tasks: "none",
+      tool: "replan_now",
+      toolCheck: (args) => (args.skipToday === true ? null : `expected skipToday: true ("no llegué a nada hoy"), got ${JSON.stringify(args.skipToday)}`),
+      maxChars: 600
+    },
+    toolsOnly: true
+  },
+  {
+    name: "replan: se atrasó y pide reacomodar (sin decir que hoy no hace más)",
+    message: "me atrasé con varias cosas de estos días, ¿podés reacomodarlas?",
+    tasks: sampleTasks(),
+    expectation: {
+      tasks: "none",
+      tool: "replan_now",
+      toolCheck: (args) => (args.skipToday === true ? "did not say it is done for today: skipToday should not be true" : null),
+      maxChars: 600
+    },
+    toolsOnly: true
+  },
+  {
+    name: "replan: fija una tarea que ya existe y no crea otra",
+    message: "fijá el TP del jueves para que no se mueva",
+    tasks: sampleTasks(),
+    expectation: {
+      tasks: "none",
+      tool: "pin_task",
+      toolCheck: (args) => (typeof args.title === "string" && /tp/i.test(args.title) && args.pinned !== false ? null : `expected pin_task with a title about the TP, pinned not false; got ${JSON.stringify(args)}`),
+      maxChars: 500
+    },
     toolsOnly: true
   },
 

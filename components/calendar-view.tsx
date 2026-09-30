@@ -4,7 +4,7 @@ import { canFocusTask } from "@/lib/focus-eligibility";
 import Image from "next/image";
 import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Play, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Pencil, Pin, PinOff, Play, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useAppLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,8 @@ import { getTodayReminders, isFutureOccurrence, isRecommendable, isVisibleInToda
 import { emptyStateCopy, focusCopy, monthCopy, quickAddCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { Input } from "@/components/ui/input";
+import { plannedDateOf, daysPastDue } from "@/lib/task-replan";
+import { replanCopy } from "@/lib/replan-copy";
 import { NowCard } from "@/components/now-card";
 import { PriorityPill } from "@/components/priority-pill";
 import type { NowView } from "@/lib/use-now";
@@ -82,6 +84,12 @@ type CalendarViewProps = {
   onOpenProject?: (projectId: string) => void;
   /** Lo que se muestra debajo de cada tarea (por ejemplo, su checklist de "no te olvides"). */
   renderTaskExtra?: (task: Task) => ReactNode;
+  /** Lo que va arriba de todo: el aviso del replan. */
+  topSlot?: ReactNode;
+  /** Fijar o soltar una tarea: una fijada no se mueve nunca en la replanificación. */
+  onPin?: (id: string, pinned: boolean) => void;
+  /** Un conflicto con la fecha límite: correr la fecha o sumar minutos por día. */
+  onResolveConflict?: (input: { op: "extend"; taskId: string; days: number } | { op: "minutes"; minutes: number }) => void;
   /** Lo que va entre la recomendación y los recordatorios: las sesiones de proyectos de hoy. */
   projectSlot?: ReactNode;
   /** Sesiones de proyecto de hoy: se suman al conteo de pendientes del encabezado. */
@@ -105,6 +113,9 @@ export function CalendarView({
   onOpenProject,
   renderTaskExtra,
   projectSlot,
+  topSlot,
+  onPin,
+  onResolveConflict,
   extraPending = 0
 }: CalendarViewProps) {
   const { language, copy } = useAppLanguage();
@@ -140,9 +151,11 @@ export function CalendarView({
   }, [calDays, todayKey]);
 
   const tasksByDate = allTasks.reduce<Record<string, Task[]>>((acc, task) => {
-    if (!task.dueDate) return acc;
-    if (!acc[task.dueDate]) acc[task.dueDate] = [];
-    acc[task.dueDate].push(task);
+    // El calendario muestra cada tarea el día en que hay que hacerla (planificado), no el que vence.
+    const day = plannedDateOf(task);
+    if (!day) return acc;
+    if (!acc[day]) acc[day] = [];
+    acc[day].push(task);
     return acc;
   }, {});
 
@@ -207,6 +220,9 @@ export function CalendarView({
         onEdit={() => onEditTask(task.id)}
         onDelete={() => void onDeleteTask(task.id)}
         onFocus={() => onFocusTask(task.id)}
+        todayKey={todayKey}
+        onPin={onPin ? () => onPin(task.id, !task.pinned) : undefined}
+        onResolveConflict={onResolveConflict}
         extra={renderTaskExtra?.(task)}
         progress={task.kind === "project" ? projectProgress?.[task.id] : undefined}
         onOpenProject={task.kind === "project" && onOpenProject ? () => onOpenProject(task.id) : undefined}
@@ -320,6 +336,8 @@ export function CalendarView({
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {topSlot && <div className="px-5 pt-3">{topSlot}</div>}
+
         {/* What to do right now — the star of the screen */}
         {now && (
           <div className="px-5 pt-3">
@@ -368,7 +386,7 @@ export function CalendarView({
                   )}
                   <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
                   {task.dueDate < todayKey && (
-                    <span className="flex-shrink-0 text-[11px] text-red-400">{getDueDateLabel(task.dueDate, language)}</span>
+                    <span className="flex-shrink-0 text-[11px] text-muted-foreground">{getDueDateLabel(task.dueDate, language)}</span>
                   )}
                   {task.seriesId && <Repeat className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-label={copy.taskList.repeats} />}
                   <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
@@ -551,10 +569,16 @@ type TaskRowProps = {
   progress?: { done: number; total: number };
   onOpenProject?: () => void;
   extra?: ReactNode;
+  todayKey: string;
+  onPin?: () => void;
+  onResolveConflict?: (input: { op: "extend"; taskId: string; days: number } | { op: "minutes"; minutes: number }) => void;
 };
 
-function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus, progress, onOpenProject, extra }: TaskRowProps) {
+function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, onDelete, onFocus, progress, onOpenProject, extra, todayKey, onPin, onResolveConflict }: TaskRowProps) {
   const { copy } = useAppLanguage();
+  const rt = replanCopy(language);
+  const pastDue = daysPastDue(task, todayKey);
+  const planned = task.plannedOn && task.plannedOn !== task.dueDate && task.plannedOn >= todayKey ? task.plannedOn : null;
   const focusT = focusCopy[language];
   const steps = task.steps ?? [];
   return (
@@ -588,8 +612,20 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
           <span className="text-xs text-muted-foreground">{task.category}</span>
           <span className="text-xs text-muted-foreground">·</span>
           <span className="text-xs text-muted-foreground">
-            {getDueDateLabel(task.dueDate, language)} · {formatDueDate(task.dueDate, language)}
+            {pastDue === null
+              ? getDueDateLabel(task.dueDate, language)
+              : pastDue === 1
+                ? rt.dueYesterday
+                : rt.dueOn(formatDueDate(task.dueDate, language))}{" "}
+            · {formatDueDate(task.dueDate, language)}
           </span>
+          {planned && <span className="text-xs text-muted-foreground">· {rt.plannedFor(formatDueDate(planned, language))}</span>}
+          {task.pinned && !task.done && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+              <Pin className="h-2.5 w-2.5" />
+              {rt.pinned}
+            </span>
+          )}
           {task.time && (
             <span className="text-xs font-medium tabular-nums text-muted-foreground">{task.time}</span>
           )}
@@ -627,10 +663,37 @@ function TaskRow({ task, language, isMutating, isRecommended, onToggle, onEdit, 
             </span>
           )}
         </div>
+        {task.conflict && !task.done && (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="task-conflict">
+            <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{rt.conflict.label}</span>
+            {onResolveConflict && (
+              <>
+                <button type="button" className="text-xs font-semibold text-primary underline underline-offset-2" onClick={() => onResolveConflict({ op: "extend", taskId: task.id, days: 3 })}>
+                  {rt.conflict.extend(3)}
+                </button>
+                <button type="button" className="text-xs font-semibold text-primary underline underline-offset-2" onClick={() => onResolveConflict({ op: "minutes", minutes: 30 })}>
+                  {rt.conflict.minutes(30)}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {extra}
       </div>
 
       <div className="flex flex-shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+        {onPin && !task.done && task.kind === "task" && (
+          <button
+            onClick={onPin}
+            disabled={isMutating}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            aria-label={task.pinned ? rt.unpin : rt.pin}
+            title={task.pinned ? rt.unpin : rt.pin}
+            aria-pressed={Boolean(task.pinned)}
+          >
+            {task.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+          </button>
+        )}
         {canFocusTask(task) && (
           <button
             onClick={onFocus}

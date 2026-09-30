@@ -8,7 +8,7 @@ import { runMiloAgent } from "@/lib/milo-agent";
 import { buildTaskPromptParts } from "@/lib/milo-chat-prompt";
 import type { FactsPort, ScheduleData, ToolContext } from "@/lib/milo-tools";
 import { parseTaskActions } from "@/lib/task-actions";
-import { CASES, NOW, type EvalCase } from "./milo-cases";
+import { addDays, CASES, iso, NOW, type EvalCase } from "./milo-cases";
 import type { Task, TaskInput } from "@/types/task";
 
 /**
@@ -170,6 +170,17 @@ if (!hasAnyProvider) {
         userMessage: testCase.message,
         turn: { factCalls: 0 },
         facts,
+        // Sin base: lo que se mide es que Milo use estas tools cuando toca y con los argumentos justos.
+        replan: {
+          run: async () => ({ moved: [{ title: "Entregar TP de álgebra", from: iso(addDays(now, -1)), to: iso(addDays(now, 1)) }], conflicts: [] })
+        },
+        pin: {
+          find: async ({ title }) =>
+            (testCase.tasks ?? [])
+              .filter((t) => title.toLowerCase().split(/\s+/).every((w) => t.title.toLowerCase().includes(w)))
+              .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate, pinned: false })),
+          set: async () => true
+        },
         load: async () => scheduleFor(testCase.tasks ?? [], testCase.busy, now)
       };
       const result = await runMiloAgent({
@@ -309,6 +320,13 @@ if (!hasAnyProvider) {
             fail(`what_should_i_do_now: expected energy ${want.energy}, got ${JSON.stringify(got)}`);
           }
         }
+      }
+      if (e.toolCheck && e.tool) {
+        const call = out.toolCalls.find((c) => c.name === e.tool);
+        let args: Record<string, unknown> = {};
+        try { args = call ? (JSON.parse(call.arguments) as Record<string, unknown>) : {}; } catch { /* argumentos rotos: cuentan como vacíos */ }
+        const problem = e.toolCheck(args);
+        if (problem) fail(`${e.tool}: ${problem}`);
       }
       if (e.distinctDays !== undefined && out.proposalDays < e.distinctDays) {
         fail(`expected the week spread over at least ${e.distinctDays} days, got ${out.proposalDays}`);
