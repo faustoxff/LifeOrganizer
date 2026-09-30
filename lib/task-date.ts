@@ -66,6 +66,14 @@ export function getTodayInTimeZone(timeZone: string, now: Date = new Date()): st
   return `${pick("year")}-${pick("month")}-${pick("day")}`;
 }
 
+/** La hora local (0-23) de un instante en la zona del usuario. Zona inválida = UTC. */
+export function getHourInTimeZone(timeZone: string, now: Date = new Date()): number {
+  const zone = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 0;
+}
+
 export function formatTodayLongDate(language: AppLanguage) {
   const today = new Date();
   const locale = getDateLocale(language);
