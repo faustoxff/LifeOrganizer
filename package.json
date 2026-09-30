@@ -14,6 +14,7 @@
     "check:release": "node scripts/check-release.ts",
     "eval:milo": "node scripts/eval-milo.mjs",
     "eval:projects": "node scripts/eval-projects.mjs",
+    "eval:checklists": "node scripts/eval-checklists.mjs",
     "deploy:env": "bash scripts/deploy-env.sh"
   },
   "dependencies": {

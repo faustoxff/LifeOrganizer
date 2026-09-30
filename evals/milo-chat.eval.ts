@@ -6,7 +6,7 @@ import { DEFAULT_AVAILABILITY } from "@/lib/availability";
 import { chatWithMilo, classifyChatFailure } from "@/lib/milo";
 import { runMiloAgent } from "@/lib/milo-agent";
 import { buildTaskPromptParts } from "@/lib/milo-chat-prompt";
-import type { ScheduleData, ToolContext } from "@/lib/milo-tools";
+import type { FactsPort, ScheduleData, ToolContext } from "@/lib/milo-tools";
 import { parseTaskActions } from "@/lib/task-actions";
 import { CASES, NOW, type EvalCase } from "./milo-cases";
 import type { Task, TaskInput } from "@/types/task";
@@ -120,6 +120,9 @@ if (!hasAnyProvider) {
     asked: boolean;
     proposalDays: number;
     weekStart: string | null;
+    /** Hechos que Milo guardó / propuso. En el camino de texto no existen. */
+    factsSaved: Array<{ key: string; value: string }>;
+    factProposals: Array<{ key: string; value: string }>;
   };
 
   const runCase = async (testCase: EvalCase, isPro: boolean): Promise<Outcome> => {
@@ -144,9 +147,18 @@ if (!hasAnyProvider) {
     const promptTokens = Math.round((staticContext.length + dynamicContext.length) / 3.8);
 
     if (viaTools) {
+      // Sin base: un puerto de hechos en memoria. Lo que se mide es qué decide guardar Milo y qué
+      // rechaza el servidor (la cita, el filtro de sensibles), que es código real.
+      const facts: FactsPort = {
+        list: async () => [],
+        save: async () => ({ status: "saved" })
+      };
       const toolCtx: ToolContext = {
         today: now.toISOString().split("T")[0],
         now,
+        userMessage: testCase.message,
+        turn: { factCalls: 0 },
+        facts,
         load: async () => scheduleFor(testCase.tasks ?? [])
       };
       const result = await runMiloAgent({
@@ -168,7 +180,9 @@ if (!hasAnyProvider) {
         toolsUsed: result.toolsUsed,
         asked: result.toolsUsed.includes("ask_user"),
         proposalDays: result.proposal ? new Set(result.taskActions.map((t) => t.dueDate)).size : 0,
-        weekStart: result.proposal?.weekStart ?? null
+        weekStart: result.proposal?.weekStart ?? null,
+        factsSaved: result.factsSaved,
+        factProposals: result.factProposals
       };
     }
 
@@ -191,7 +205,9 @@ if (!hasAnyProvider) {
       toolsUsed: [],
       asked: false,
       proposalDays: 0,
-      weekStart: null
+      weekStart: null,
+      factsSaved: [],
+      factProposals: []
     };
   };
 
@@ -268,6 +284,16 @@ if (!hasAnyProvider) {
       }
       if (e.weekStart && out.weekStart !== e.weekStart) {
         fail(`expected the plan to start ${e.weekStart}, got ${out.weekStart}`);
+      }
+      if (e.savesFact) {
+        const hit = out.factsSaved.some((f) => e.savesFact!.test(`${f.key} ${f.value}`));
+        if (!hit) {
+          fail(`expected a saved fact matching ${e.savesFact}, got saved=[${out.factsSaved.map((f) => `${f.key}=${f.value}`).join(" | ")}] proposed=[${out.factProposals.map((f) => f.key).join(", ")}]`);
+        }
+      }
+      if (e.savesNoFact && (out.factsSaved.length > 0 || out.factProposals.length > 0)) {
+        const all = [...out.factsSaved, ...out.factProposals].map((f) => `${f.key}=${f.value}`);
+        fail(`expected no fact to be saved or proposed, got [${all.join(" | ")}]`);
       }
     }
 
@@ -438,6 +464,8 @@ if (!hasAnyProvider) {
             message: testCase.message,
             via: out.via,
             toolsUsed: out.toolsUsed,
+            factsSaved: out.factsSaved,
+            factProposals: out.factProposals,
             raw: out.raw,
             visible: out.text,
             tasks: out.tasks,

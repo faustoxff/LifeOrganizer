@@ -8,7 +8,7 @@ incomodidad.
 ## Correr
 
 ```bash
-npm run eval:milo                          # 52 casos × 2 modelos
+npm run eval:milo                          # 58 casos × 2 modelos
 npm run eval:milo -- --model default       # solo qwen (la mitad del costo)
 npm run eval:milo -- --filter recurrencia  # un subconjunto
 npm run eval:milo -- --repeat 5            # buscar casos intermitentes
@@ -41,6 +41,7 @@ CLI a `EVAL_*` y ahí está la única fuente de verdad.
 | `ask_user` | falta un dato necesario → pregunta; si el resto está claro, propone sin preguntar |
 | `agenda` | "¿qué tengo el jueves?" contesta con lo que hay, sin proponer nada |
 | `cambio` | mover o sacar un ítem de una propuesta pendiente |
+| `memoria` | guardar lo que el usuario dice de sí mismo (que es despistado, cuándo rinde) y **no** guardar salud, dinero, documentos ni un plan de pasada |
 | `comfort` | largo de la respuesta, planes gigantes |
 | `regresion` | los bugs que este harness encontró, para que no vuelvan |
 
@@ -293,3 +294,35 @@ Cada uno corre dos pruebas:
   todo el trabajo y que el scheduler, con la disponibilidad por defecto, lo haga entrar.
 
 Al final imprime cuántos tokens gastó la corrida, para estimar el costo de un plan.
+
+## Eval de checklists (`npm run eval:checklists`)
+
+Juzga la calidad de lo que hace la IA en las checklists de "no te olvides", contra los modelos
+de verdad. Como los otros, **no** entra en `npm test`.
+
+```bash
+npm run eval:checklists                        # los 4 casos de lista + la clasificación
+npm run eval:checklists -- --filter gimnasio   # uno solo
+npm run eval:checklists -- --provider ollama
+npm run eval:checklists -- --transcript /tmp/checklists
+```
+
+Los casos están en `evals/checklist-cases.ts`:
+
+- **Despistado va al gimnasio en invierno con lluvia**: la lista *de hoy* (la que sale de aplicar
+  `selectItems` a la época y al clima) tiene agua, celular, abrigo y algo para la lluvia, y no tiene
+  protector ni gorra; y la lista *guardada* trae el protector marcado como de verano, para otro día.
+- **Correr en verano con calor**: agua y protector/gorra; nada de abrigo ni paraguas.
+- **Pádel**: usa el hecho "juega al pádel" (paleta, pelotas).
+- **Viaje, en inglés**: documentos, cargador y celular; el idioma sigue a la app.
+- **Clasificación en lote**: gimnasio, dentista, clase de guitarra, peluquería y ajedrez son
+  actividades; pagar la luz, llamar a mamá, entregar un TP, comprar leche y limpiar **no**. Un
+  mandado marcado como actividad es el error caro (muestra una checklist donde no va), así que se
+  reporta aparte.
+
+En todos: ítems de hasta 6 palabras y 60 caracteres, ninguno sensible, y al menos uno con época o
+clima (sin condicionales la lista es igual todos los días).
+
+Los casos de `memoria` de `eval:milo` corren con la **verificación real del servidor** (la cita tiene
+que estar en el mensaje y el filtro de sensibles): miden qué decide guardar el modelo y qué rechaza el
+código. Son `toolsOnly`: en el camino de texto no hay `remember_fact`.

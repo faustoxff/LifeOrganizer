@@ -537,3 +537,33 @@ mano: nada se inventa.
 
 `user_facts`, `activity_checklists`, `activity_titles`, `tasks.checklist` y
 `user_settings.approx_lat/approx_lon`. Todo con `IF NOT EXISTS`.
+
+### Decisiones de la etapa 5
+
+- **Free no tiene checklists ni hechos por chat** (las dos usan IA o tools). Ver y borrar lo que Spark
+  sabe siempre se puede, sea cual sea el plan: los datos son del usuario.
+- **`remember_fact` es la única tool que escribe**, y lo hace bajo condiciones que comprueba el servidor:
+  filtro de sensibles, y para `stated` que su `quote` esté en el mensaje actual. Hasta 3 por mensaje.
+  No hay tool para borrar: borrar es de la pantalla.
+- **Los hechos entran al prompt como datos, no como instrucciones**: una línea, sin saltos, dentro del
+  bloque dinámico. Un hecho con "ignorá las reglas" no puede cambiar el prompt fijo (que además no
+  lleva nada del usuario).
+- **Semántica de la ✕**: "hoy no lo necesito". Lo que queda cuenta como usado al completar la
+  tarea; lo que se saca suma un "sacado". Se aprende **solo al completar**, una vez por ocurrencia
+  (`learnedAt`); una tarea salteada no enseña nada.
+- **Lo que se agrega a mano** entra a la lista guardada al momento (con un uso) y no se cuenta de nuevo al
+  completar.
+- **Una serie usa su lista, si no la de la actividad; una tarea suelta usa la que haya de esa
+  actividad** (el gimnasio de los martes y "ir al gimnasio" hoy son lo mismo). Una serie nunca usa la
+  lista de otra serie.
+- **Detección**: caché por usuario y título → reglas → un lote de IA. Se detecta sobre las tareas de los
+  próximos 7 días, y solo el cliente lo pide (una vez por tarea y sesión). El descarte del usuario ("esto
+  no es una actividad") le gana a las reglas. Un mandado ("llamar al médico") nunca es actividad.
+- **Sin cuota o con la IA caída**, la checklist queda vacía y el usuario la arma a mano; no se guarda
+  nada, así que se reintenta después.
+- **La ubicación la da el usuario** con un botón (geolocalización del navegador) y se guarda redondeada
+  a 0,1° en el servidor; el servidor nunca conserva la exacta. Sin ubicación, sin clima: se omite.
+- **Aviso previo**: solo funciona con Spark abierto (como los otros avisos), por la Notification API, sin
+  push del servidor. El permiso se pide aparte del aviso diario.
+- **Orden de despliegue**: `loadTasks` ahora lee `tasks.checklist`, así que la migración tiene que
+  aplicarse **antes** de desplegar; con el código nuevo y el esquema viejo, cargar las tareas falla.
