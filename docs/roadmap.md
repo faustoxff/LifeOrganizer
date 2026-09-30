@@ -17,9 +17,8 @@ contexto de hacia dónde va el producto y qué decisiones ya están tomadas.
 
 1. **Modelo de datos** (hecha).
 2. **Scheduler determinístico** (hecha).
-3. **Flujo de proyecto** ← etapa actual (diseño al final de este documento).
-3b. (sin cambios más abajo) (subtareas con IA + UI de proyectos).
-4. Milo con tool calling y planificación semanal.
+3. **Flujo de proyecto** (hecha).
+4. **Milo con tool calling y planificación semanal** ← etapa actual (diseño al final de este documento).
 5. Memoria estructurada y checklists.
 
 Google Calendar (importación y clasificación de eventos) queda para después.
@@ -333,3 +332,102 @@ en `ai_token_log` y los deja en el log del servidor.
   (`session:<id>`), con prioridad alta si el plan viene TIGHT o INFEASIBLE.
 - **Duración de las llamadas**: `maxDuration = 60` en extract, intake y plan. Dividir un proyecto
   grande puede tardar; el plan de Vercel Hobby limita a 60 s.
+
+---
+
+## Etapa 4: Milo con tools y planificación semanal
+
+Hasta acá Milo escribía un bloque `TASKS_ACTION:[...]` al final de su texto y un parser lo
+rescataba. Funciona, pero el modelo tiene que acordarse de un formato, el texto y la acción
+viajan mezclados, y no hay forma de que consulte nada. Ahora Milo llama a **tools**; el
+servidor las valida y las ejecuta. **El modelo nunca escribe en la base**: `create_items` y
+`plan_week` solo *proponen*, y crear sigue siendo el botón de confirmar de siempre.
+
+### Capa de IA (`lib/ai/`)
+
+- `ToolSpec`, `ToolCall`, mensajes `assistant` con `toolCalls` y `tool` con el resultado
+  (`AgentMessage`). El formato de cable es el de OpenAI (`lib/ai/tool-wire.ts`), que hablan
+  Groq y Ollama Cloud; los dos adaptadores lo usan.
+- Cada adaptador dice, **por modelo**, si soporta tools (`supportsTools(model)`). Groq sí
+  (`GROQ_TOOLS=off` lo apaga). Ollama solo con modelos `gpt-oss` (`OLLAMA_TOOLS=on|off` fuerza).
+- `complete({ tools })` salta los proveedores sin soporte (no cuentan como falla para el
+  breaker). Si no queda ninguno falla como `bad_request`.
+- **Fallback**: si ningún proveedor configurado soporta tools, o si todos rechazan la
+  request con `bad_request`, el chat usa el camino de antes: prompt con `TASKS_ACTION` y
+  `parseTaskActions`. Ese parser y ese texto del prompt solo viven en ese camino.
+
+### Tools de Milo (`lib/milo-tools.ts`)
+
+Solo para Plus/Pro. En Free Milo no tiene tools (igual que hoy no crea nada).
+
+| Tool | Qué hace | Efecto |
+|---|---|---|
+| `create_items({items})` | valida y normaliza cada ítem (`normalizeTaskAction`: kind, hora, `repeat`) | propone: el chat muestra los ítems para confirmar |
+| `plan_week({items, weekStart?})` | corre `lib/week-planner.ts` con la disponibilidad y la agenda real | propone una distribución por día con una razón por ítem |
+| `get_schedule({from, to})` | tareas, ocurrencias, sesiones de proyecto y capacidad libre por día | solo lectura; vuelve al modelo |
+| `ask_user({question})` | corta el turno con esa pregunta | Milo responde con la pregunta |
+
+- Cada tool valida sus argumentos en el servidor (fechas reales, tope de ítems, largos) y
+  devuelve un error legible al modelo si algo no cuadra, para que corrija. Nada se
+  ejecuta con argumentos que no parsean.
+- Todo dato viene de la base filtrado por `user_id`: el ejecutor se arma con el usuario
+  autenticado y **no hay ningún argumento del modelo que elija de quién son los datos**.
+  Lo que manda el cliente (`tasks`) alimenta el prompt, no las tools.
+- Un turno es un bucle de hasta 4 rondas modelo → tools → modelo. Cuenta como **un** uso de
+  `milo_chat`, igual que hoy. La última ronda va con `tool_choice: none` para que escriba
+  la respuesta.
+- `create_items`: hasta 20 ítems por llamada. Una recurrencia es un ítem con `repeat`.
+
+### `plan_week`: criterio humano (`lib/week-planner.ts`)
+
+Puro (sin base ni reloj), determinístico. Reusa del scheduler la **capacidad por día**
+(`capacityOn`) y la **duración efectiva** (`effectiveMinutes`, con el factor aprendido del
+usuario). No usa `schedule()` para colocar porque esos ítems son atómicos: el scheduler
+parte y encadena subtareas de un proyecto, acá una tarea de 60 min no se corta en dos.
+
+Ítem **fijo**: trae `dueDate` (o `time`): va ese día. Ítem **flexible**: sin fecha, se reparte
+en la semana; puede traer `deadline` (no después de). Una recurrencia cae en los días que
+su regla marca dentro de la semana.
+
+1. **Admisión**: qué entra se decide por prioridad y fecha contra el espacio libre total de
+   la semana (capacidad menos lo ya agendado). Lo que no entra se *difiere*.
+2. **Colocación**, de la ventana más angosta a la más ancha, día por día con un puntaje:
+   - No entra en la capacidad del día → descartado.
+   - **Dos pesadas el mismo día** (`estimateMin >= 90`, o prioridad alta con `>= 60`) → penalización
+     fuerte. Cuenta también lo ya agendado.
+   - **Más del 85 %** de la capacidad del día, habiendo otro con lugar → penalización fuerte.
+   - **Día liviano**: se reserva el día con menos carga; solo se usa si no hay otro lugar.
+   - **Parejo**: menor ocupación resultante y menos ítems ese día. Empate: el día más temprano.
+3. **No entra todo**: lo diferido sale con la sugerencia de pasarlo a la semana siguiente,
+   en orden de prioridad y fecha, y el planificador lo dice (no inventa días imposibles).
+4. Cada ítem colocado lleva una **razón estructurada** (`FIXED`, `RECURRING`, `BEST_FIT`,
+   `HEAVY_CLASH`, `OVER_CAP`, `KEEP_LIGHT`, `BUSIER`, `DEADLINE`) con los datos (día descartado, minutos ya
+   agendados, título de lo que ya había). El texto sale de `lib/i18n.ts`, así la tarjeta
+   sale en el idioma del usuario y a Milo le llega en español para que la cuente.
+5. Avisos: día sobrecargado por fechas fijas, semana sin día liviano, deadline en riesgo.
+
+### Proponer, cambiar, confirmar
+
+- La propuesta llega al chat como tarjeta: lista por día con la razón y, si los hay, los
+  diferidos. Botones **Crear** y **Descartar**. Crear usa el flujo de siempre
+  (`onCreateTask`, con sus límites de plan).
+- **Cambios por chat**: el cliente manda de vuelta los ítems pendientes de confirmar
+  (`pendingTaskActions`); van al prompt y Milo vuelve a llamar la tool con la lista
+  completa y el cambio. La propuesta nueva reemplaza a la anterior.
+- `pendingTaskAction` (uno) pasa a ser una lista: la confirmación ya manejaba varios ítems, lo
+  que faltaba era que el modelo supiera de todos.
+
+### Prompt (`lib/milo-chat-prompt.ts`)
+
+Reescrito para tools: cuándo usar cada una, que incluya **todos** los ítems del mensaje,
+`repeat` para lo recurrente, preguntar solo lo imprescindible (y con `ask_user`, no
+inventando). Sin ningún rastro de `TASKS_ACTION`. Ese formato queda en un modo `legacy`
+del mismo módulo, que solo se usa en el fallback.
+
+### Decisiones de la etapa 4
+
+- Free no tiene tools; los límites de `milo_chat` no cambian.
+- `get_schedule` conoce las ocurrencias de recurrentes que ya están generadas (ventana de
+  14 días) y lo dice cuando el rango la pasa.
+- `plan_week` sin `weekStart` planifica los próximos 7 días desde hoy.
+- Si falla una ronda después de haber propuesto algo, la propuesta se devuelve igual.
