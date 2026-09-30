@@ -132,3 +132,19 @@ CREATE TABLE IF NOT EXISTS user_settings (
   timezone   TEXT NOT NULL DEFAULT 'UTC',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ---------------------------------------------------------------------------
+-- Roadmap etapa 2: scheduler (ver docs/roadmap.md)
+-- ---------------------------------------------------------------------------
+
+-- Minutos disponibles por dia de la semana ({"0":60,"1":120,...,"6":180}, 0 =
+-- domingo). NULL = todavia no configurada: la app usa el default y muestra el
+-- paso de onboarding.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS availability JSONB;
+
+-- Excepciones por fecha { "YYYY-MM-DD": minutos }; reemplazan al valor del dia.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS availability_overrides JSONB NOT NULL DEFAULT '{}';
+
+-- Tope diario propio de un proyecto. NULL = sin tope propio.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS daily_cap_min INTEGER
+  CHECK (daily_cap_min IS NULL OR daily_cap_min BETWEEN 1 AND 1440);

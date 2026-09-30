@@ -15,8 +15,8 @@ contexto de hacia dónde va el producto y qué decisiones ya están tomadas.
 
 ## Etapas
 
-1. **Modelo de datos** ← etapa actual (este documento describe su diseño).
-2. Scheduler determinístico.
+1. **Modelo de datos** (hecha).
+2. **Scheduler determinístico** ← etapa actual (diseño al final de este documento).
 3. Flujo de proyecto (subtareas con IA + UI de proyectos).
 4. Milo con tool calling y planificación semanal.
 5. Memoria estructurada y checklists.
@@ -132,3 +132,90 @@ actual_min, created_at`.
 - Proyecto ↔ tarea: una ocurrencia no puede pasar a proyecto (los proyectos no se repiten).
 - Milo solo ve en su prompt las ocurrencias de hoy, no las futuras. La planificación
   semanal con las series completas llega en la etapa 4.
+
+---
+
+## Etapa 2: scheduler determinístico
+
+Código puro y con tests exhaustivos. **La IA nunca decide fechas**: la IA (etapa 3)
+dice qué subtareas hay y cuánto duran; el scheduler decide cuándo.
+
+### Disponibilidad del usuario
+
+- `user_settings.availability JSONB`: minutos por día de la semana (0 = domingo),
+  ej. `{"0":60,"1":120,...,"6":180}`. `NULL` significa "todavía no configurada" y
+  dispara el paso corto del onboarding; el código usa el default mientras tanto:
+  lunes a viernes 120, sábado 180, domingo 60.
+- `user_settings.availability_overrides JSONB`: `{ "YYYY-MM-DD": minutos }` para
+  excepciones ("el viernes no puedo" = 0). Un override **reemplaza** el valor del día
+  de la semana, no se suma.
+- `tasks.daily_cap_min` (`NULL` = sin tope propio): tope diario de un proyecto.
+- UI: ajustes de disponibilidad con un slider por día, y el mismo diálogo como paso
+  de onboarding si no está configurada. Todavía no hay UI de proyectos.
+
+### `lib/scheduler.ts`
+
+Puro: sin DB, sin `Date.now()`; todo entra por parámetro. `schedule(input) → output`.
+
+Entrada: `today`, `availability`, `overrides`, `projects` (con `deadline`,
+`dailyCapMin?` y subtareas con `estimateMin`, `dependsOn`, `done`, `actualMin?`),
+`fixedLoad` (minutos ya ocupados por fecha) y `params` (`inflation` 1.3,
+`targetFraction` 0.85, `maxSessionMin` 90, `minSessionMin` 20).
+
+1. Se valida que las dependencias formen un DAG. Un ciclo lanza un error explícito
+   (`SchedulerCycleError`, `code: "CYCLE"`), igual que una dependencia inexistente.
+2. Duración efectiva = `ceil(estimateMin * inflation)`. Lo hecho no se agenda. Si una
+   subtarea sin terminar ya tiene `actualMin`, se le descuenta.
+3. Fecha objetivo = `today + floor((deadline - today) * targetFraction)`, y nunca
+   después de `deadline - 1` si faltan al menos 2 días.
+4. **Holgura CPM** medida en minutos de capacidad acumulada (no en días): así es
+   comparable entre proyectos. `holgura = latestStart - earliestStart`, con el
+   `latestStart` calculado hacia atrás desde la capacidad acumulada hasta la fecha
+   objetivo. Es estática: se calcula una vez desde hoy.
+5. **Relleno hacia adelante** día por día. Capacidad del día = `override ??
+   availability[dow]` menos `fixedLoad`. Entre las subtareas disponibles se elige la de
+   menor holgura; desempate: deadline más cercano, después orden original. Una subtarea
+   está disponible cuando todas sus dependencias están hechas o agendadas por completo
+   en días **anteriores** (un sucesor empieza el día después, no el mismo día).
+6. Sesiones: a lo sumo una por subtarea y por día, de hasta `maxSessionMin`. Al partir
+   una subtarea, ninguna sesión queda por debajo de `minSessionMin` salvo la última
+   (el resto se rebalancea para que la última no quede diminuta). `part`/`totalParts` se
+   asignan al final, ordenadas por fecha.
+7. Nada en días pasados. Hoy usa la capacidad que queda: quien llama descuenta lo ya
+   trabajado hoy en `fixedLoad`.
+8. El trabajo nunca se agenda después del `deadline` (el día del deadline sí se usa).
+
+Salida: `sessions`, `perProject` (`feasible`, `plannedEndDate`, `bufferDays`,
+`shortfallMin`, `bufferConsumedPct`, y si no es factible, `options`) y `warnings`
+(`INFEASIBLE`, `TIGHT`, `OVERLOADED_DAY`, `CYCLE`).
+
+`bufferConsumedPct` = qué parte del margen entre la fecha objetivo y el deadline ya se
+gastó (0 si termina antes del objetivo, 100 si no es factible).
+
+**Si no entra no se inventa un plan imposible**: se devuelve lo que sí entra antes del
+deadline, `feasible = false`, `shortfallMin` y `options` calculadas re-planificando:
+`extraMinPerDay` (minutos extra por día, en todos los días hasta el deadline, que
+harían falta; `null` si ni con 24 h por día alcanza, p. ej. una cadena de dependencias
+más larga que los días) y `achievableDeadline` (la fecha más cercana que sí alcanzaría
+con la disponibilidad actual, o `null`).
+
+`OVERLOADED_DAY` avisa de un día donde la carga fija ya supera la disponibilidad.
+
+### Replanificación
+
+`replan(input, previous?)` usa `schedule` con el estado actual. Lo no hecho de días
+pasados vuelve a entrar desde hoy, porque las sesiones pasadas se descartan y lo que
+falta se calcula de la duración efectiva menos `actualMin`. Quien llama es responsable
+de sumar a `actualMin` el trabajo que el usuario hizo.
+
+Es **estable**: mismo input, mismo output. Las sesiones de hoy en adelante del plan
+anterior se conservan (se "clavan") mientras sigan siendo válidas —hay capacidad, se
+respeta el tope del proyecto y el orden de dependencias— y el resto se planifica
+alrededor. Si clavarlas deja a algún proyecto peor que un plan nuevo desde cero, gana
+el plan nuevo. Devuelve además `newlyInfeasible` y `newlyTight` para alertar cuando
+`feasible` pasa a `false` o `bufferConsumedPct` supera 50 (`TIGHT`).
+
+### Aprendizaje del factor de inflación
+
+`lib/estimate-learning.ts`: mediana de `actualMin / estimateMin` del historial del
+usuario, acotada entre 1.0 y 2.0, con un mínimo de 5 muestras; si no alcanzan, 1.3.
