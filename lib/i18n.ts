@@ -141,6 +141,34 @@ export const copy = {
       repeatMonths: "months",
       repeatOnDays: "On"
     },
+    weekPlan: {
+      title: "Plan for the week",
+      createAll: (n: number) => `Create ${n} items`,
+      created: "Plan created",
+      lightDay: "Light day",
+      offDay: "No time set",
+      loadOf: (used: string, cap: string) => `${used} of ${cap}`,
+      deferredTitle: "Doesn't fit this week",
+      deferredMove: (date: string) => `Suggested: move it to ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Needs ${need}, only ${free} left`,
+      deferredTooBig: (need: string, max: string) => `${need} is longer than any single day (${max}). It works better as a project`,
+      deferredNoDay: "No available day before its deadline",
+      outsideTitle: "On other dates",
+      warnOverbooked: (day: string) => `${day} is over your available time`,
+      warnNoLightDay: "There is no light day this week",
+      warnDeadline: (title: string) => `"${title}" may miss its deadline`,
+      reasons: {
+        fixed: "Fixed date",
+        recurring: (days: string) => `Repeats on ${days}`,
+        deadline: (date: string) => `Has to be done by ${date}`,
+        bestFit: "The day with the most room",
+        full: (other: string, time: string) => `${other} is already full (${time})`,
+        heavyClash: (other: string, title: string) => `${other} already has something heavy${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} would go over 85% (${time} already planned)`,
+        keepLight: (other: string) => `Keeping ${other} light`,
+        busier: (other: string, time: string) => `${other} is busier (${time} already planned)`
+      }
+    },
     project: {
       lockedNote: "Projects are available on the Plus and Pro plans.",
       skipToday: "Skip today",
@@ -427,6 +455,34 @@ export const copy = {
       repeatMonths: "meses",
       repeatOnDays: "Los"
     },
+    weekPlan: {
+      title: "Plan para la semana",
+      createAll: (n: number) => `Crear ${n} elementos`,
+      created: "Plan creado",
+      lightDay: "Día liviano",
+      offDay: "Sin tiempo disponible",
+      loadOf: (used: string, cap: string) => `${used} de ${cap}`,
+      deferredTitle: "No entra esta semana",
+      deferredMove: (date: string) => `Sugerencia: pasarlo al ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Necesita ${need} y solo quedan ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} es más de lo que cabe en un día (${max}). Mejor como proyecto`,
+      deferredNoDay: "No hay un día disponible antes de su fecha límite",
+      outsideTitle: "En otras fechas",
+      warnOverbooked: (day: string) => `${day} supera tu tiempo disponible`,
+      warnNoLightDay: "Esta semana no queda ningún día liviano",
+      warnDeadline: (title: string) => `"${title}" podría no llegar a su fecha límite`,
+      reasons: {
+        fixed: "Fecha fija",
+        recurring: (days: string) => `Se repite ${days}`,
+        deadline: (date: string) => `Tiene que estar para el ${date}`,
+        bestFit: "El día con más lugar",
+        full: (other: string, time: string) => `${other} ya está lleno (${time})`,
+        heavyClash: (other: string, title: string) => `${other} ya tiene algo pesado${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} pasaría del 85 % (${time} ya planificadas)`,
+        keepLight: (other: string) => `Para dejar ${other} liviano`,
+        busier: (other: string, time: string) => `${other} está más cargado (${time} ya planificadas)`
+      }
+    },
     project: {
       lockedNote: "Los proyectos están disponibles en los planes Plus y Pro.",
       skipToday: "Saltear hoy",
@@ -712,6 +768,34 @@ export const copy = {
       repeatMonths: "meses",
       repeatOnDays: "Em"
     },
+    weekPlan: {
+      title: "Plano da semana",
+      createAll: (n: number) => `Criar ${n} itens`,
+      created: "Plano criado",
+      lightDay: "Dia leve",
+      offDay: "Sem tempo disponível",
+      loadOf: (used: string, cap: string) => `${used} de ${cap}`,
+      deferredTitle: "Não cabe nesta semana",
+      deferredMove: (date: string) => `Sugestão: passar para ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Precisa de ${need} e só restam ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} é mais do que cabe em um dia (${max}). Funciona melhor como projeto`,
+      deferredNoDay: "Não há dia disponível antes do prazo",
+      outsideTitle: "Em outras datas",
+      warnOverbooked: (day: string) => `${day} passa do seu tempo disponível`,
+      warnNoLightDay: "Não sobra nenhum dia leve nesta semana",
+      warnDeadline: (title: string) => `"${title}" pode não chegar ao prazo`,
+      reasons: {
+        fixed: "Data fixa",
+        recurring: (days: string) => `Repete ${days}`,
+        deadline: (date: string) => `Precisa estar pronto até ${date}`,
+        bestFit: "O dia com mais folga",
+        full: (other: string, time: string) => `${other} já está cheio (${time})`,
+        heavyClash: (other: string, title: string) => `${other} já tem algo pesado${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} passaria de 85 % (${time} já planejadas)`,
+        keepLight: (other: string) => `Para manter ${other} leve`,
+        busier: (other: string, time: string) => `${other} está mais carregado (${time} já planejadas)`
+      }
+    },
     project: {
       lockedNote: "Os projetos estão disponíveis nos planos Plus e Pro.",
       skipToday: "Pular hoje",
@@ -899,6 +983,34 @@ export const copy = {
       repeatDays: "jours",
       repeatMonths: "mois",
       repeatOnDays: "Le"
+    },
+    weekPlan: {
+      title: "Plan de la semaine",
+      createAll: (n: number) => `Créer ${n} éléments`,
+      created: "Plan créé",
+      lightDay: "Journée légère",
+      offDay: "Pas de temps disponible",
+      loadOf: (used: string, cap: string) => `${used} sur ${cap}`,
+      deferredTitle: "Ne tient pas cette semaine",
+      deferredMove: (date: string) => `Suggestion : le reporter au ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Demande ${need}, il ne reste que ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} dépasse ce qui tient dans une journée (${max}). Mieux vaut en faire un projet`,
+      deferredNoDay: "Aucun jour disponible avant l'échéance",
+      outsideTitle: "À d'autres dates",
+      warnOverbooked: (day: string) => `${day} dépasse votre temps disponible`,
+      warnNoLightDay: "Aucune journée légère cette semaine",
+      warnDeadline: (title: string) => `« ${title} » pourrait manquer son échéance`,
+      reasons: {
+        fixed: "Date fixe",
+        recurring: (days: string) => `Se répète ${days}`,
+        deadline: (date: string) => `À terminer d'ici le ${date}`,
+        bestFit: "Le jour avec le plus de place",
+        full: (other: string, time: string) => `${other} est déjà plein (${time})`,
+        heavyClash: (other: string, title: string) => `${other} a déjà quelque chose de lourd${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} dépasserait 85 % (${time} déjà prévues)`,
+        keepLight: (other: string) => `Pour garder ${other} léger`,
+        busier: (other: string, time: string) => `${other} est plus chargé (${time} déjà prévues)`
+      }
     },
     project: {
       lockedNote: "Les projets sont disponibles avec les offres Plus et Pro.",
@@ -1088,6 +1200,34 @@ export const copy = {
       repeatMonths: "Monate",
       repeatOnDays: "An"
     },
+    weekPlan: {
+      title: "Wochenplan",
+      createAll: (n: number) => `${n} Einträge anlegen`,
+      created: "Plan angelegt",
+      lightDay: "Leichter Tag",
+      offDay: "Keine Zeit eingeplant",
+      loadOf: (used: string, cap: string) => `${used} von ${cap}`,
+      deferredTitle: "Passt nicht in diese Woche",
+      deferredMove: (date: string) => `Vorschlag: auf ${date} verschieben`,
+      deferredNoRoom: (need: string, free: string) => `Braucht ${need}, es bleiben nur ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} ist mehr, als an einen Tag passt (${max}). Besser als Projekt`,
+      deferredNoDay: "Kein freier Tag vor der Frist",
+      outsideTitle: "An anderen Terminen",
+      warnOverbooked: (day: string) => `${day} überschreitet deine verfügbare Zeit`,
+      warnNoLightDay: "Diese Woche bleibt kein leichter Tag",
+      warnDeadline: (title: string) => `„${title}“ könnte die Frist verpassen`,
+      reasons: {
+        fixed: "Fester Termin",
+        recurring: (days: string) => `Wiederholt sich ${days}`,
+        deadline: (date: string) => `Muss bis ${date} fertig sein`,
+        bestFit: "Der Tag mit dem meisten Platz",
+        full: (other: string, time: string) => `${other} ist schon voll (${time})`,
+        heavyClash: (other: string, title: string) => `${other} hat schon etwas Schweres${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} würde über 85 % kommen (${time} schon geplant)`,
+        keepLight: (other: string) => `Damit ${other} leicht bleibt`,
+        busier: (other: string, time: string) => `${other} ist voller (${time} schon geplant)`
+      }
+    },
     project: {
       lockedNote: "Projekte sind in den Tarifen Plus und Pro verfügbar.",
       skipToday: "Heute überspringen",
@@ -1275,6 +1415,34 @@ export const copy = {
       repeatDays: "giorni",
       repeatMonths: "mesi",
       repeatOnDays: "Il"
+    },
+    weekPlan: {
+      title: "Piano della settimana",
+      createAll: (n: number) => `Crea ${n} elementi`,
+      created: "Piano creato",
+      lightDay: "Giorno leggero",
+      offDay: "Nessun tempo disponibile",
+      loadOf: (used: string, cap: string) => `${used} su ${cap}`,
+      deferredTitle: "Non ci sta questa settimana",
+      deferredMove: (date: string) => `Suggerimento: spostarlo al ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Servono ${need}, restano solo ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} è più di quanto entra in un giorno (${max}). Meglio come progetto`,
+      deferredNoDay: "Nessun giorno disponibile prima della scadenza",
+      outsideTitle: "In altre date",
+      warnOverbooked: (day: string) => `${day} supera il tuo tempo disponibile`,
+      warnNoLightDay: "Questa settimana non resta nessun giorno leggero",
+      warnDeadline: (title: string) => `"${title}" potrebbe non rispettare la scadenza`,
+      reasons: {
+        fixed: "Data fissa",
+        recurring: (days: string) => `Si ripete ${days}`,
+        deadline: (date: string) => `Da finire entro il ${date}`,
+        bestFit: "Il giorno con più spazio",
+        full: (other: string, time: string) => `${other} è già pieno (${time})`,
+        heavyClash: (other: string, title: string) => `${other} ha già qualcosa di pesante${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} supererebbe l'85 % (${time} già previste)`,
+        keepLight: (other: string) => `Per lasciare ${other} leggero`,
+        busier: (other: string, time: string) => `${other} è più carico (${time} già previste)`
+      }
     },
     project: {
       lockedNote: "I progetti sono disponibili nei piani Plus e Pro.",
@@ -1464,6 +1632,34 @@ export const copy = {
       repeatMonths: "个月",
       repeatOnDays: "在"
     },
+    weekPlan: {
+      title: "本周计划",
+      createAll: (n: number) => `创建 ${n} 项`,
+      created: "计划已创建",
+      lightDay: "轻松的一天",
+      offDay: "没有可用时间",
+      loadOf: (used: string, cap: string) => `${used} / ${cap}`,
+      deferredTitle: "本周排不下",
+      deferredMove: (date: string) => `建议：挪到 ${date}`,
+      deferredNoRoom: (need: string, free: string) => `需要 ${need}，只剩 ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} 超过一天能容纳的时间（${max}），更适合作为项目`,
+      deferredNoDay: "截止日前没有可用的日子",
+      outsideTitle: "其他日期",
+      warnOverbooked: (day: string) => `${day} 超出了你的可用时间`,
+      warnNoLightDay: "本周没有轻松的一天",
+      warnDeadline: (title: string) => `「${title}」可能赶不上截止日期`,
+      reasons: {
+        fixed: "固定日期",
+        recurring: (days: string) => `重复：${days}`,
+        deadline: (date: string) => `必须在 ${date} 前完成`,
+        bestFit: "空闲最多的一天",
+        full: (other: string, time: string) => `${other} 已经排满（${time}）`,
+        heavyClash: (other: string, title: string) => `${other} 已经有繁重的事${title ? `（${title}）` : ""}`,
+        overCap: (other: string, time: string) => `${other} 会超过 85%（已安排 ${time}）`,
+        keepLight: (other: string) => `让 ${other} 保持轻松`,
+        busier: (other: string, time: string) => `${other} 更忙（已安排 ${time}）`
+      }
+    },
     project: {
       lockedNote: "项目功能包含在 Plus 和 Pro 方案中。",
       skipToday: "今天跳过",
@@ -1651,6 +1847,34 @@ export const copy = {
       repeatDays: "日",
       repeatMonths: "か月",
       repeatOnDays: "曜日"
+    },
+    weekPlan: {
+      title: "今週の計画",
+      createAll: (n: number) => `${n} 件を作成`,
+      created: "計画を作成しました",
+      lightDay: "余裕のある日",
+      offDay: "使える時間なし",
+      loadOf: (used: string, cap: string) => `${used} / ${cap}`,
+      deferredTitle: "今週は入りきらない",
+      deferredMove: (date: string) => `提案：${date} に回す`,
+      deferredNoRoom: (need: string, free: string) => `${need} 必要ですが、残りは ${free} です`,
+      deferredTooBig: (need: string, max: string) => `${need} は 1 日に収まる量（${max}）を超えています。プロジェクトにするのがおすすめです`,
+      deferredNoDay: "期限までに空いている日がありません",
+      outsideTitle: "その他の日付",
+      warnOverbooked: (day: string) => `${day} は使える時間を超えています`,
+      warnNoLightDay: "今週は余裕のある日がありません",
+      warnDeadline: (title: string) => `「${title}」は期限に間に合わないかもしれません`,
+      reasons: {
+        fixed: "日付固定",
+        recurring: (days: string) => `繰り返し：${days}`,
+        deadline: (date: string) => `${date} までに終える必要があります`,
+        bestFit: "最も余裕のある日",
+        full: (other: string, time: string) => `${other} はすでにいっぱいです（${time}）`,
+        heavyClash: (other: string, title: string) => `${other} にはすでに重い作業があります${title ? `（${title}）` : ""}`,
+        overCap: (other: string, time: string) => `${other} は 85% を超えます（すでに ${time} 予定）`,
+        keepLight: (other: string) => `${other} を軽く保つため`,
+        busier: (other: string, time: string) => `${other} のほうが忙しいです（すでに ${time} 予定）`
+      }
     },
     project: {
       lockedNote: "プロジェクトは Plus と Pro プランで使えます。",
@@ -1840,6 +2064,34 @@ export const copy = {
       repeatMonths: "개월",
       repeatOnDays: "요일"
     },
+    weekPlan: {
+      title: "이번 주 계획",
+      createAll: (n: number) => `${n}개 만들기`,
+      created: "계획을 만들었어요",
+      lightDay: "여유로운 날",
+      offDay: "가용 시간 없음",
+      loadOf: (used: string, cap: string) => `${used} / ${cap}`,
+      deferredTitle: "이번 주에는 들어가지 않아요",
+      deferredMove: (date: string) => `제안: ${date}로 미루기`,
+      deferredNoRoom: (need: string, free: string) => `${need} 필요하지만 ${free}만 남았어요`,
+      deferredTooBig: (need: string, max: string) => `${need}은(는) 하루에 들어가는 시간(${max})보다 길어요. 프로젝트로 만드는 게 좋아요`,
+      deferredNoDay: "마감 전에 쓸 수 있는 날이 없어요",
+      outsideTitle: "다른 날짜",
+      warnOverbooked: (day: string) => `${day}은(는) 가용 시간을 넘어요`,
+      warnNoLightDay: "이번 주에는 여유로운 날이 없어요",
+      warnDeadline: (title: string) => `"${title}"은(는) 마감을 놓칠 수 있어요`,
+      reasons: {
+        fixed: "고정 날짜",
+        recurring: (days: string) => `반복: ${days}`,
+        deadline: (date: string) => `${date}까지 끝내야 해요`,
+        bestFit: "가장 여유로운 날",
+        full: (other: string, time: string) => `${other}은(는) 이미 가득 찼어요 (${time})`,
+        heavyClash: (other: string, title: string) => `${other}에는 이미 무거운 일이 있어요${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other}은(는) 85%를 넘게 돼요 (이미 ${time} 계획됨)`,
+        keepLight: (other: string) => `${other}을(를) 여유롭게 두려고`,
+        busier: (other: string, time: string) => `${other}이(가) 더 바빠요 (이미 ${time} 계획됨)`
+      }
+    },
     project: {
       lockedNote: "프로젝트는 Plus와 Pro 요금제에서 사용할 수 있어요.",
       skipToday: "오늘은 건너뛰기",
@@ -2027,6 +2279,34 @@ export const copy = {
       repeatDays: "дн.",
       repeatMonths: "мес.",
       repeatOnDays: "По"
+    },
+    weekPlan: {
+      title: "План на неделю",
+      createAll: (n: number) => `Создать: ${n}`,
+      created: "План создан",
+      lightDay: "Лёгкий день",
+      offDay: "Нет свободного времени",
+      loadOf: (used: string, cap: string) => `${used} из ${cap}`,
+      deferredTitle: "Не помещается на этой неделе",
+      deferredMove: (date: string) => `Предложение: перенести на ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Нужно ${need}, осталось только ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} — больше, чем помещается в один день (${max}). Лучше сделать проектом`,
+      deferredNoDay: "Нет свободного дня до срока",
+      outsideTitle: "На другие даты",
+      warnOverbooked: (day: string) => `${day} превышает ваше доступное время`,
+      warnNoLightDay: "На этой неделе не осталось лёгкого дня",
+      warnDeadline: (title: string) => `«${title}» может не успеть к сроку`,
+      reasons: {
+        fixed: "Фиксированная дата",
+        recurring: (days: string) => `Повторяется: ${days}`,
+        deadline: (date: string) => `Нужно закончить до ${date}`,
+        bestFit: "День с наибольшим запасом",
+        full: (other: string, time: string) => `${other}: день уже заполнен (${time})`,
+        heavyClash: (other: string, title: string) => `${other}: уже есть что-то тяжёлое${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other}: будет больше 85% (уже запланировано ${time})`,
+        keepLight: (other: string) => `${other}: оставляем лёгким`,
+        busier: (other: string, time: string) => `${other}: загружен сильнее (уже ${time})`
+      }
     },
     project: {
       lockedNote: "Проекты доступны на тарифах Plus и Pro.",
@@ -2216,6 +2496,34 @@ export const copy = {
       repeatMonths: "ay",
       repeatOnDays: "Günler"
     },
+    weekPlan: {
+      title: "Haftalık plan",
+      createAll: (n: number) => `${n} öğe oluştur`,
+      created: "Plan oluşturuldu",
+      lightDay: "Hafif gün",
+      offDay: "Uygun zaman yok",
+      loadOf: (used: string, cap: string) => `${used} / ${cap}`,
+      deferredTitle: "Bu hafta sığmıyor",
+      deferredMove: (date: string) => `Öneri: ${date} tarihine ertele`,
+      deferredNoRoom: (need: string, free: string) => `${need} gerekiyor, sadece ${free} kaldı`,
+      deferredTooBig: (need: string, max: string) => `${need}, bir güne sığandan (${max}) uzun. Proje olarak yapmak daha iyi`,
+      deferredNoDay: "Son tarihten önce uygun gün yok",
+      outsideTitle: "Diğer tarihler",
+      warnOverbooked: (day: string) => `${day} uygun zamanını aşıyor`,
+      warnNoLightDay: "Bu hafta hafif gün kalmadı",
+      warnDeadline: (title: string) => `"${title}" son tarihe yetişmeyebilir`,
+      reasons: {
+        fixed: "Sabit tarih",
+        recurring: (days: string) => `Tekrar: ${days}`,
+        deadline: (date: string) => `${date} tarihine kadar bitmeli`,
+        bestFit: "En çok yeri olan gün",
+        full: (other: string, time: string) => `${other} zaten dolu (${time})`,
+        heavyClash: (other: string, title: string) => `${other} gününde zaten ağır bir iş var${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} %85'i aşardı (${time} zaten planlı)`,
+        keepLight: (other: string) => `${other} hafif kalsın diye`,
+        busier: (other: string, time: string) => `${other} daha yoğun (${time} zaten planlı)`
+      }
+    },
     project: {
       lockedNote: "Projeler Plus ve Pro planlarında kullanılabilir.",
       skipToday: "Bugünü atla",
@@ -2404,6 +2712,34 @@ export const copy = {
       repeatMonths: "maanden",
       repeatOnDays: "Op"
     },
+    weekPlan: {
+      title: "Weekplan",
+      createAll: (n: number) => `${n} items aanmaken`,
+      created: "Plan aangemaakt",
+      lightDay: "Lichte dag",
+      offDay: "Geen tijd beschikbaar",
+      loadOf: (used: string, cap: string) => `${used} van ${cap}`,
+      deferredTitle: "Past niet in deze week",
+      deferredMove: (date: string) => `Suggestie: verschuif naar ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Vraagt ${need}, er is nog maar ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} is meer dan er op één dag past (${max}). Werkt beter als project`,
+      deferredNoDay: "Geen beschikbare dag vóór de deadline",
+      outsideTitle: "Op andere data",
+      warnOverbooked: (day: string) => `${day} zit boven je beschikbare tijd`,
+      warnNoLightDay: "Deze week is er geen lichte dag",
+      warnDeadline: (title: string) => `"${title}" haalt de deadline misschien niet`,
+      reasons: {
+        fixed: "Vaste datum",
+        recurring: (days: string) => `Herhaalt ${days}`,
+        deadline: (date: string) => `Moet klaar zijn op ${date}`,
+        bestFit: "De dag met de meeste ruimte",
+        full: (other: string, time: string) => `${other} is al vol (${time})`,
+        heavyClash: (other: string, title: string) => `${other} heeft al iets zwaars${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other} zou boven 85% komen (${time} al gepland)`,
+        keepLight: (other: string) => `Om ${other} licht te houden`,
+        busier: (other: string, time: string) => `${other} is drukker (${time} al gepland)`
+      }
+    },
     project: {
       lockedNote: "Projecten zijn beschikbaar in de abonnementen Plus en Pro.",
       skipToday: "Vandaag overslaan",
@@ -2591,6 +2927,34 @@ export const copy = {
       repeatDays: "dni",
       repeatMonths: "mies.",
       repeatOnDays: "W"
+    },
+    weekPlan: {
+      title: "Plan tygodnia",
+      createAll: (n: number) => `Utwórz: ${n}`,
+      created: "Plan utworzony",
+      lightDay: "Lekki dzień",
+      offDay: "Brak dostępnego czasu",
+      loadOf: (used: string, cap: string) => `${used} z ${cap}`,
+      deferredTitle: "Nie mieści się w tym tygodniu",
+      deferredMove: (date: string) => `Propozycja: przenieś na ${date}`,
+      deferredNoRoom: (need: string, free: string) => `Potrzeba ${need}, zostało tylko ${free}`,
+      deferredTooBig: (need: string, max: string) => `${need} to więcej, niż mieści się w jednym dniu (${max}). Lepiej jako projekt`,
+      deferredNoDay: "Brak wolnego dnia przed terminem",
+      outsideTitle: "W innych terminach",
+      warnOverbooked: (day: string) => `${day} przekracza twój dostępny czas`,
+      warnNoLightDay: "W tym tygodniu nie został żaden lekki dzień",
+      warnDeadline: (title: string) => `„${title}” może nie zdążyć na termin`,
+      reasons: {
+        fixed: "Stały termin",
+        recurring: (days: string) => `Powtarza się: ${days}`,
+        deadline: (date: string) => `Musi być gotowe do ${date}`,
+        bestFit: "Dzień z największym zapasem",
+        full: (other: string, time: string) => `${other}: dzień jest już pełny (${time})`,
+        heavyClash: (other: string, title: string) => `${other}: jest już coś ciężkiego${title ? ` (${title})` : ""}`,
+        overCap: (other: string, time: string) => `${other}: przekroczyłby 85% (już zaplanowano ${time})`,
+        keepLight: (other: string) => `${other}: zostaje lekki`,
+        busier: (other: string, time: string) => `${other}: jest bardziej obciążony (już ${time})`
+      }
     },
     project: {
       lockedNote: "Projekty są dostępne w planach Plus i Pro.",
