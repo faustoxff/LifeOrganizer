@@ -16,8 +16,9 @@ contexto de hacia dónde va el producto y qué decisiones ya están tomadas.
 ## Etapas
 
 1. **Modelo de datos** (hecha).
-2. **Scheduler determinístico** ← etapa actual (diseño al final de este documento).
-3. Flujo de proyecto (subtareas con IA + UI de proyectos).
+2. **Scheduler determinístico** (hecha).
+3. **Flujo de proyecto** ← etapa actual (diseño al final de este documento).
+3b. (sin cambios más abajo) (subtareas con IA + UI de proyectos).
 4. Milo con tool calling y planificación semanal.
 5. Memoria estructurada y checklists.
 
@@ -219,3 +220,94 @@ el plan nuevo. Devuelve además `newlyInfeasible` y `newlyTight` para alertar cu
 
 `lib/estimate-learning.ts`: mediana de `actualMin / estimateMin` del historial del
 usuario, acotada entre 1.0 y 2.0, con un mínimo de 5 muestras; si no alcanzan, 1.3.
+
+---
+
+## Etapa 3: flujo de proyectos
+
+El flujo completo usando el scheduler: cargar → entender y preguntar → dividir →
+vista previa → confirmar → día a día. **La IA propone qué subtareas hay y cuánto
+duran; nunca decide fechas** (eso es `schedule()`).
+
+### Carga
+
+Al elegir el tipo Proyecto en el formulario (solo Plus/Pro; en Free el chip aparece
+bloqueado con un enlace a /plans) se piden título, descripción libre, fecha límite y
+archivos opcionales.
+
+- **Archivos**: PDF, DOCX, TXT y MD. **No se guardan**: se extrae el texto en el servidor
+  (`unpdf` para PDF, `mammoth` para DOCX) en `POST /api/projects/extract`, un archivo por
+  request, y se guarda solo un resumen en `tasks.context_summary`.
+- **Límites**: 3 archivos por proyecto y **4 MB** por archivo. No son los 10 MB del ejemplo
+  original: Vercel corta cualquier request de más de 4.5 MB antes de que llegue a la
+  función, así que un límite mayor solo produciría errores opacos.
+- **Texto largo**: si un archivo supera ~12 000 caracteres se resume por partes (mapa →
+  resumen final) con el modelo rápido antes de guardarlo. El contexto total queda en
+  ≤ 6 000 caracteres.
+- **Imágenes**: quedan afuera. Ningún proveedor configurado en `lib/ai/providers` tiene
+  visión (`supportsVision` es `false` en ambos) y los mensajes son solo texto. La UI lo
+  dice. Cuando haya un proveedor con visión se implementa el envío de imágenes y se
+  cambia la bandera.
+
+### Entender y preguntar — `POST /api/projects/intake`
+
+La IA recibe título, descripción, fecha límite, resumen de archivos, disponibilidad y
+la fecha de hoy. Devuelve JSON validado:
+`{ understanding, questions: [{ id, text, why, type: "text"|"choice"|"number", options? }] }`.
+Máximo 5 preguntas y solo las que cambian el plan; `questions = []` si no hace falta
+ninguna. JSON inválido: un reintento con el error y después falla con un mensaje claro.
+
+### Dividir — `POST /api/projects/plan`
+
+La IA devuelve `subtasks: [{ tempId, title, estimateMin, dependsOn[], deliverable? }]`.
+Reglas del prompt: 4–25 subtareas concretas y verificables; la primera se puede empezar
+hoy en menos de 30 minutos; incluir revisión final y margen para imprevistos. El servidor
+valida (JSON, DAG sin ciclos, estimaciones de 10 a 240 min, ids únicos y existentes), reintenta
+una vez con el error y luego falla. Después corre `schedule()` con el factor de inflación
+aprendido del usuario.
+
+Modelo: un tier nuevo `planner` (`GROQ_PLANNER_MODEL`, `OLLAMA_PLANNER_MODEL`, por defecto el
+modelo `pro`) para que dividir un proyecto grande pueda usar más capacidad que el chat.
+
+### Vista previa y confirmación
+
+- `POST /api/projects/preview` recalcula el plan sin IA (para ediciones del usuario).
+- Si `feasible = false` se muestra **antes** de confirmar con las opciones: más minutos por
+  día (suma a la disponibilidad, y lo dice), correr la fecha, o recortar alcance (borrar
+  subtareas hasta cubrir el faltante).
+- Al confirmar (`POST /api/projects`) el servidor **recalcula** el plan (no confía en las
+  sesiones del cliente) y guarda todo.
+
+### Modelo de datos
+
+- `tasks.context_summary`; `subtasks.deliverable`, `subtasks.not_before`.
+- **`project_sessions`**: el scheduler produce sesiones (una subtarea puede tener varias) y
+  `subtasks.scheduled_date` es solo la fecha de la primera. Las sesiones se guardan porque
+  `replan` las necesita como plan anterior para no mover lo ya agendado.
+- `user_settings.projects_replanned_on`: marca "ya se replanificó hoy" (por usuario).
+- `ai_token_log`: tokens por llamada de IA de proyectos, para medir el costo.
+
+### Día a día
+
+- "Hoy" muestra las sesiones de proyectos del día (proyecto, progreso X/Y) junto con las tareas.
+- Completar una subtarea registra `actual_min`: el tiempo del modo foco si se usó el
+  temporizador; si no, se pregunta "¿cuánto tardaste?" con opciones o se saltea.
+- Acciones sobre una sesión: **completar** la subtarea, **hice esta parte** (suma minutos sin
+  terminarla) y **saltear** (`not_before = mañana`: la subtarea se difiere; el scheduler ya
+  entiende `notBefore`).
+- Se replanifica una vez por día por usuario, al cargar la app, y al completar o saltear.
+  Como `replan` es estable y lo hace el servidor, es idempotente.
+- `fixedLoad` sale de las tareas normales pendientes (`estimate_min` en su fecha; lo vencido
+  cuenta hoy). Las sesiones de proyecto no cuentan como carga fija.
+- Con `TIGHT` o `INFEASIBLE` aparece un aviso con acciones concretas (correr la fecha,
+  sumar minutos por día, ver el plan).
+- Detalle del proyecto: plan completo por día, progreso y margen restante.
+- Completar todas las subtareas completa el proyecto. Las subtareas hechas cuentan para la
+  racha.
+
+### Plan, límites y costos
+
+Crear un proyecto y todo lo que usa IA es Plus/Pro. Kinds nuevos en `lib/usage-limits.ts`:
+`project_intake` y `project_plan` (Free 0). Replanificar y avanzar un proyecto ya creado es
+determinista, no gasta IA y no se bloquea. Cada llamada de IA de proyectos guarda sus tokens
+en `ai_token_log` y los deja en el log del servidor.

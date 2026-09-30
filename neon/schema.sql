@@ -148,3 +148,51 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS availability_overrides JSONB 
 -- Tope diario propio de un proyecto. NULL = sin tope propio.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS daily_cap_min INTEGER
   CHECK (daily_cap_min IS NULL OR daily_cap_min BETWEEN 1 AND 1440);
+
+-- ---------------------------------------------------------------------------
+-- Roadmap etapa 3: flujo de proyectos (ver docs/roadmap.md)
+-- ---------------------------------------------------------------------------
+
+-- Resumen del texto de los archivos que el usuario adjunto. Los archivos en si no
+-- se guardan.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS context_summary TEXT;
+
+-- La IA marca los entregables; not_before difiere una subtarea salteada.
+ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS deliverable BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS not_before DATE;
+
+-- Sesiones que produce el scheduler. Una subtarea puede tener varias (subtasks
+-- solo guarda la fecha de la primera). Se guardan porque replan las necesita como
+-- plan anterior para no mover lo ya agendado.
+CREATE TABLE IF NOT EXISTS project_sessions (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  project_id  TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  subtask_id  TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+  date        DATE NOT NULL,
+  minutes     INTEGER NOT NULL CHECK (minutes > 0),
+  part        INTEGER NOT NULL CHECK (part > 0),
+  total_parts INTEGER NOT NULL CHECK (total_parts > 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (subtask_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS project_sessions_user_date_idx ON project_sessions (user_id, date);
+CREATE INDEX IF NOT EXISTS project_sessions_project_idx ON project_sessions (project_id);
+
+-- Ultimo dia (en la zona del usuario) en que se replanificaron sus proyectos.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS projects_replanned_on DATE;
+
+-- Tokens por llamada de IA de proyectos, para poder medir el costo por plan.
+CREATE TABLE IF NOT EXISTS ai_token_log (
+  id            BIGSERIAL PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  provider      TEXT NOT NULL,
+  model         TEXT NOT NULL,
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ai_token_log_user_idx ON ai_token_log (user_id, created_at);
