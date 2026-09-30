@@ -716,3 +716,64 @@ dicho usa la ventana libre calculada.
   "No agendar encima de un bloque" ahí significa restarle el bloque (y su margen) a la capacidad de su día;
   el solape a nivel de hora solo lo evita la recomendación.
 - Evals: 4 casos `ahora` (tiempo dicho, evento cerca, cansado, nada pendiente).
+
+## Etapa 8: un solo replan diario para todo (fecha planificada vs fecha límite)
+
+Hasta acá solo los proyectos se reacomodaban solos; una tarea suelta que quedaba atrás simplemente
+seguía "vencida". Esta etapa le da a todo el mismo replan diario, sin culpa para el usuario y sin tocar
+nunca una fecha límite.
+
+### 0. Fecha planificada vs fecha límite
+
+Sí: `tasks.due_date` se usaba a la vez como "cuándo hacerla" y "cuándo vence", y no existía nada
+equivalente. Se agrega **`tasks.planned_on DATE NULL`** (NULL = "el día que vence"). La replanificación mueve
+`planned_on` y **nunca `due_date`**. "Hoy", el calendario y la carga de cada día usan
+`planned_on ?? due_date` (`plannedDateOf`, `lib/task-replan.ts`); la urgencia, la recomendación y los
+avisos siguen usando la fecha límite. Editar la fecha a mano (el formulario) es una decisión del usuario:
+borra `planned_on`.
+
+### 1. `replanAll(userId, today)` (`lib/replan.ts`)
+
+Corre una vez por día (reusa `user_settings.projects_replanned_on`) cuando se abre la app, y de nuevo (con
+`force`) tras un cambio grande (hoy: cambiar la disponibilidad; mañana: conectar el calendario).
+
+- **Tareas sueltas** (`kind = 'task'`, sin serie, pendientes, sin hora, no fijadas) cuya fecha planificada
+  ya pasó y cuya fecha límite **no**: se mueven al primer día, entre hoy y su fecha límite, con lugar. El lugar
+  es la disponibilidad del día menos las tareas ya planificadas ahí, las sesiones de proyecto y la agenda ocupada
+  (eventos y márgenes). Orden: fecha límite más cercana, prioridad, id. Una tarea más larga que cualquier día
+  toma el primer día vacío.
+- Si **no entra antes de su fecha límite**, no se fuerza: queda marcada en conflicto
+  (`tasks.replan_conflict`) y se ofrecen las opciones de los proyectos: correr la fecha y más minutos por día.
+- Si su **fecha límite ya pasó**, no se mueve: queda en "Hoy", arriba, marcada "Venció ayer".
+- **Proyectos**: lo de siempre (`replanAndPersist`), ahora dentro de `replanAll`.
+- **Recordatorios y tareas con hora vencidos**: no se mueven solos. Salen en el aviso con "Hecho / Pasar a
+  mañana / Descartar".
+- **Ocurrencias de series** que no se hicieron: pasan a `skipped` (ya lo hacía `ensureOccurrences`) y no cortan
+  la racha.
+- **Fijadas** (`tasks.pinned`): nunca se mueven. Se fijan desde la fila de la tarea o con Milo.
+- Cada movimiento suma `postponed_count` (regla de la etapa 6: pasar a un día posterior) y queda registrado en
+  `replan_moves` para contarlo y deshacerlo.
+- Idempotente: correrlo dos veces el mismo día no cambia nada (lo movido ya no está atrasado).
+
+### 2. Contárselo al usuario
+
+Un aviso único y corto ("Reacomodé 3 tareas que quedaron pendientes"), con el detalle desplegable (qué, de qué
+día a qué día) y "Deshacer" por ítem. Nada en rojo por estar atrasado; rojo solo para un conflicto real con una
+fecha límite. Una tarea que llegó a `postponed_count >= 3` sugiere dividirla en pasos (con la IA que ya existe),
+bajar la prioridad o borrarla.
+
+### 3. Milo
+
+`replan_now` (reacomoda ahora) y `pin_task` (fija o suelta una tarea por su título). A diferencia del resto de las
+tools de acción, estas dos **hacen el cambio**, porque son reversibles (Deshacer y "soltar") y el usuario las pidió
+explícitamente ("reorganizame", "fijá el TP del jueves").
+
+### Decisiones de la etapa 8
+
+- **Deshacer** devuelve `planned_on` y `postponed_count` a como estaban. Esa tarea no se vuelve a mover el mismo
+  día; al día siguiente el replan la mueve otra vez salvo que la fijes.
+- El aviso se guarda (`replan_moves.seen`) hasta que el usuario lo cierra, no solo para la primera carga.
+- Las tareas sueltas **con hora** se tratan como los recordatorios: la hora es un compromiso, no se mueve sola.
+- Las opciones de conflicto para una tarea: correr la fecha límite unos días o sumar minutos por día; ambas
+  vuelven a correr el replan.
+- **Orden de despliegue**: aplicar la migración **antes** de desplegar (las consultas de tareas leen columnas nuevas).
