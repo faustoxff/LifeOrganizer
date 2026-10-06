@@ -1,5 +1,6 @@
 "use client";
 
+import { createCardTitle } from "@/lib/create-title";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CheckCircle, Loader2, Mic, MicOff, Repeat, Send, Trash2, XCircle } from "lucide-react";
@@ -416,7 +417,7 @@ export function MiloChat({
             {msg.taskActions && msg.taskActions.length > 0 && !msg.proposal && (
               <div className="mt-2 max-w-[85%] w-full rounded-xl border border-border bg-card p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground">
-                  {msg.taskActions.length === 1 ? copy.milo.createTask : `${copy.milo.createTask} (${msg.taskActions.length})`}
+                  {createCardTitle(msg.taskActions.map((a) => a.kind), copy.milo, copy.weekPlan.createAll)}
                 </p>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {msg.taskActions.map((action, idx) => (

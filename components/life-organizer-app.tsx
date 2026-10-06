@@ -73,7 +73,7 @@ export function LifeOrganizerApp() {
   // Set when a focus session ended without the timer: we still owe "how long did it take?".
   const [askHowLong, setAskHowLong] = useState<string | null>(null);
   // How much time per day the user can give their pending work. `configured`
-  // false means they never set it: the first visit shows the onboarding step.
+  // configured=false means they never touched it: the suggested hours apply silently.
   const [availability, setAvailability] = useState<{ values: Availability; configured: boolean } | null>(null);
   const [availabilityDialog, setAvailabilityDialog] = useState<"onboarding" | "settings" | null>(null);
   // Editing or deleting one occurrence of a repeating task asks for the scope
@@ -165,11 +165,13 @@ export function LifeOrganizerApp() {
         const data = (await res.json()) as { availability?: unknown; configured?: unknown };
         const values = parseAvailability(data.availability);
         if (!active || !values) return;
-        const configured = data.configured === true;
-        setAvailability({ values, configured });
-        if (!configured) setAvailabilityDialog("onboarding");
+        // No onboarding prompt: nobody knows their free time days ahead. Until they
+        // choose otherwise in settings, the suggested hours are only the planner's
+        // assumption for long projects. "How much time do I have right now?" is asked
+        // in the moment, by the now card.
+        setAvailability({ values, configured: data.configured === true });
       } catch {
-        /* the app works without it; the dialog just does not show */
+        /* the app works without it, using the suggested hours */
       }
     }
     void loadAvailability();
@@ -900,8 +902,6 @@ export function LifeOrganizerApp() {
             onEditTask={handleEditTask}
             onToggleTask={handleToggleTask}
             onFocusTask={setFocusTaskId}
-            onBreakDown={handleBreakDown}
-            breakingDownTaskId={breakingDownTaskId}
             onQuickAdd={handleQuickAdd}
             projectProgress={projectProgress}
             onOpenProject={setDetailProjectId}

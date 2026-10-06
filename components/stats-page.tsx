@@ -13,6 +13,7 @@ import { statsExtraCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { StreakBadges } from "@/components/streak-badges";
 import { WorkPatterns } from "@/components/work-patterns";
+import { CompletedSection, type CompletedItem } from "@/components/completed-section";
 import type { UserPatterns } from "@/lib/user-patterns";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,8 @@ type StatsData = {
   encouragement: string;
   /** Lo aprendido de los últimos 90 días. null si no se pudo calcular. */
   patterns?: UserPatterns | null;
+  /** Everything finished, most recent first (it used to live on the main screen). */
+  completed?: CompletedItem[];
 };
 
 
@@ -59,6 +62,22 @@ export function StatsPage() {
       active = false;
     };
   }, [planLoaded, plan, language]);
+
+  // Reopening puts the task back in the pending list: it leaves this list right away and comes back if the server says no.
+  async function reopenTask(taskId: string) {
+    const previous = data;
+    setData((current) => (current ? { ...current, completed: current.completed?.filter((item) => item.id !== taskId) } : current));
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, done: false })
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setData(previous);
+    }
+  }
 
   if (planLoaded && plan !== "pro") {
     return <StatsLocked onBack={() => router.push("/app")} />;
@@ -154,6 +173,11 @@ export function StatsPage() {
                 </div>
               </div>
             </div>
+            {data.completed && data.completed.length > 0 && (
+              <div className="lg:col-span-3">
+                <CompletedSection items={data.completed} onReopen={(id) => void reopenTask(id)} />
+              </div>
+            )}
             {data.patterns && (
               <div className="lg:col-span-3">
                 <WorkPatterns patterns={data.patterns} />

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
-import { CheckCircle2, Clock, Coffee, Play, RefreshCw, Sparkles, Shirt } from "lucide-react";
+import { CheckCircle2, Clock, Coffee, Play, RefreshCw, Shirt } from "lucide-react";
 import { useAppLanguage } from "@/components/language-provider";
 import { PriorityPill } from "@/components/priority-pill";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,7 @@ type Props = {
   view: NowView;
   allTasks: readonly Task[];
   isMutating: boolean;
-  breakingDownTaskId: string | null;
   onFocusTask: (id: string) => void;
-  onBreakDown: (id: string) => void;
   onToggleTask: (id: string) => Promise<void>;
   onEditTask: (id: string) => void;
   onStartSession: (subtaskId: string) => void;
@@ -41,7 +39,7 @@ type Props = {
  * La tarjeta de "hoy": cuánto tiempo libre hay ahora, qué conviene hacer con él y por qué (una línea).
  * La elección la hace `lib/recommendation.ts`; acá solo se muestra y se corrige a mano.
  */
-export function NowCard({ view, allTasks, isMutating, breakingDownTaskId, onFocusTask, onBreakDown, onToggleTask, onEditTask, onStartSession, renderTaskExtra }: Props) {
+export function NowCard({ view, allTasks, isMutating, onFocusTask, onToggleTask, onEditTask, onStartSession, renderTaskExtra }: Props) {
   const { language, copy } = useAppLanguage();
   const t = nowCopy(language);
   const focusT = focusCopy[language];
@@ -167,12 +165,6 @@ export function NowCard({ view, allTasks, isMutating, breakingDownTaskId, onFocu
           <Button size="sm" onClick={() => onStartSession(sessionId)} className="gap-1.5">
             <Play className="h-4 w-4" />
             {focusT.focus}
-          </Button>
-        )}
-        {realTask && !realTask.steps?.length && (
-          <Button size="sm" variant="outline" className="gap-1.5" disabled={breakingDownTaskId === realTask.id} onClick={() => onBreakDown(realTask.id)}>
-            <Sparkles className="h-4 w-4" />
-            {breakingDownTaskId === realTask.id ? focusT.breaking : focusT.breakDown}
           </Button>
         )}
         {realTask && (

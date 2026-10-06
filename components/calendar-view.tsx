@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatDueDate, getDueDateLabel } from "@/lib/task-date";
 import { getTaskDurationLabel } from "@/lib/task-labels";
 import { getTodayReminders, isFutureOccurrence, isRecommendable, isVisibleInToday } from "@/lib/task-views";
-import { emptyStateCopy, focusCopy, monthCopy, quickAddCopy } from "@/lib/focus-copy";
+import { emptyStateCopy, focusCopy, quickAddCopy } from "@/lib/focus-copy";
 import { miloFace } from "@/lib/milo-face";
 import { Input } from "@/components/ui/input";
 import { plannedDateOf, daysPastDue } from "@/lib/task-replan";
@@ -76,8 +76,6 @@ type CalendarViewProps = {
   onEditTask: (id: string) => void;
   onToggleTask: (id: string) => Promise<void>;
   onFocusTask: (id: string) => void;
-  onBreakDown: (id: string) => void;
-  breakingDownTaskId: string | null;
   onQuickAdd: (title: string) => Promise<void>;
   /** Progreso X/Y por id de proyecto: las filas de proyecto lo muestran. */
   projectProgress?: Record<string, { done: number; total: number }>;
@@ -106,8 +104,6 @@ export function CalendarView({
   onEditTask,
   onToggleTask,
   onFocusTask,
-  onBreakDown,
-  breakingDownTaskId,
   onQuickAdd,
   projectProgress,
   onOpenProject,
@@ -122,7 +118,6 @@ export function CalendarView({
   const quickT = quickAddCopy[language];
   const [quickTitle, setQuickTitle] = useState("");
   const emptyT = emptyStateCopy[language];
-  const monthT = monthCopy[language];
   const today = new Date();
   const todayKey = toDateKey(today);
 
@@ -130,8 +125,6 @@ export function CalendarView({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // Collapsed = only the current week; expanded = the whole month.
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [showDone, setShowDone] = useState(false);
-  const [showOlder, setShowOlder] = useState(false);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -178,22 +171,14 @@ export function CalendarView({
   const byDoneDesc = (a: Task, b: Task) =>
     (b.completedAt ?? b.dueDate).localeCompare(a.completedAt ?? a.dueDate);
 
-  // First day of the current month, in local time.
-  const monthStart = useMemo(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-  }, []);
-  const isThisMonth = (task: Task) => (task.completedAt ?? task.dueDate).slice(0, 10) >= monthStart;
-
   const dayTasksSelected = selectedKey ? (tasksByDate[selectedKey] ?? []) : null;
   // Without a selected day the list is "today": future occurrences of a series
   // stay out of it. Picking a day in the calendar shows everything on that day.
   const listSource = dayTasksSelected ?? allTasks.filter((t) => !isFutureOccurrence(t, todayKey));
   const pendingList = listSource.filter((t) => !t.done).sort(byDueAsc);
   const allDone = listSource.filter((t) => t.done).sort(byDoneDesc);
-  const doneThisMonth = allDone.filter(isThisMonth);
-  const doneOlder = allDone.filter((t) => !isThisMonth(t));
-  const doneList = showOlder ? allDone : doneThisMonth;
+  // Completed tasks live in Statistics; here they only show up when a calendar day is picked.
+  const doneList = allDone;
   // The recommended task already has its own card above, so it is not repeated in the list.
   // Today's reminders have their own section, so they are not repeated here either.
   const listPending = selectedKey
@@ -345,9 +330,7 @@ export function CalendarView({
               view={now}
               allTasks={allTasks}
               isMutating={isMutating}
-              breakingDownTaskId={breakingDownTaskId}
               onFocusTask={onFocusTask}
-              onBreakDown={onBreakDown}
               onToggleTask={onToggleTask}
               onEditTask={onEditTask}
               onStartSession={onStartSession}
@@ -522,34 +505,6 @@ export function CalendarView({
             <ul className="flex flex-col gap-2">
               <AnimatePresence initial={false}>{displayedTasks.map(renderRow)}</AnimatePresence>
             </ul>
-          )}
-
-          {!selectedKey && allDone.length > 0 && (
-            <>
-              <button
-                onClick={() => setShowDone((v) => !v)}
-                aria-expanded={showDone}
-                className="mt-4 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {/* Chevron trails the label so this heading starts on the same
-                    left edge as the others instead of being pushed in by an icon. */}
-                {monthT.thisMonth} ({doneThisMonth.length})
-                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", showDone && "rotate-180")} />
-              </button>
-              <Collapsible open={showDone}>
-                <ul className="flex flex-col gap-2 pt-3">
-                  <AnimatePresence initial={false}>{doneList.map(renderRow)}</AnimatePresence>
-                </ul>
-                {doneOlder.length > 0 && !showOlder && (
-                  <button
-                    onClick={() => setShowOlder(true)}
-                    className="mt-3 text-xs font-medium text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
-                  >
-                    {monthT.showOlder} ({doneOlder.length})
-                  </button>
-                )}
-              </Collapsible>
-            </>
           )}
         </div>
       </div>

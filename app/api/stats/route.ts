@@ -70,6 +70,7 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
+    completed: getCompleted(tasks),
     completionRate,
     completedByWeek: getCompletedByWeek(tasks),
     lastDays: getLastDays(tasks),
@@ -130,6 +131,19 @@ Reply with the message only, no quotes.`;
   } catch {
     return "";
   }
+}
+
+/**
+ * Everything the user finished (tasks, reminders and projects), most recent first. This is the list that used to
+ * sit on the main screen; it is capped so the response stays small for people with years of history.
+ */
+const MAX_COMPLETED_LISTED = 300;
+function getCompleted(tasks: Task[]) {
+  return tasks
+    .filter((t) => t.done)
+    .map((t) => ({ id: t.id, title: t.title, category: t.category, kind: t.kind, completedAt: t.completedAt ?? t.dueDate }))
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+    .slice(0, MAX_COMPLETED_LISTED);
 }
 
 /** Completed-task count per day, oldest first, for the activity strip. */
