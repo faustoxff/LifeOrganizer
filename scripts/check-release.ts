@@ -44,7 +44,7 @@ if (!env.includes("PADDLE_NOTIFICATION_WEBHOOK_SECRET")) {
 }
 // Without these, createCheckout throws and checkout answers 502: the plans
 // page looks fine right up until someone presses the button.
-for (const key of ["PADDLE_API_KEY", "PADDLE_PRICE_PLUS", "PADDLE_PRICE_PRO"]) {
+for (const key of ["PADDLE_API_KEY", "NEXT_PUBLIC_PADDLE_PRICE_PLUS", "NEXT_PUBLIC_PADDLE_PRICE_PRO"]) {
   if (!env.includes(key)) blockers.push(`${key} is not set — Plus/Pro checkout cannot be built`);
 }
 // sitemap.ts, robots.ts and metadataBase all fall back to http://localhost:3000,

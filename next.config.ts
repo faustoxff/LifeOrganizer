@@ -14,6 +14,12 @@ const isDev = process.env.NODE_ENV !== "production";
 // forms are listed: Turnstile spins up per-request subdomains (hagen., brunhild.)
 // for the verification step.
 const turnstile = "https://challenges.cloudflare.com https://*.challenges.cloudflare.com";
+
+// Paddle's overlay checkout. The redirect flow needed none of this; opening a
+// checkout in place does: paddle.js is served from cdn.paddle.com and it frames
+// the payment page on checkout.paddle.com. Without these the overlay renders
+// blank — a silent failure, since the page looks correct until it is opened.
+const paddle = "https://cdn.paddle.com https://checkout.paddle.com https://*.paddle.com";
 // Origins the browser needs for Clerk's FAPI, WebSocket sessions and JS bundle.
 // A dev instance lives on *.clerk.accounts.dev; a live instance lives on
 // *.clerk.com. Both have to be allowed: with only the dev origin the app looks
@@ -26,7 +32,7 @@ const csp = [
   "default-src 'self'",
   // Next.js injects inline bootstrap scripts; Turbopack also needs eval in dev.
   // blob: is required because Clerk and Next both spin up workers from blob URLs.
-  `script-src 'self' 'unsafe-inline' blob:${isDev ? " 'unsafe-eval'" : ""} ${clerkHttp} ${turnstile}`,
+  `script-src 'self' 'unsafe-inline' blob:${isDev ? " 'unsafe-eval'" : ""} ${clerkHttp} ${turnstile} ${paddle}`,
   `worker-src 'self' blob:`,
   `style-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "img-src 'self' data: blob: https:",
@@ -35,8 +41,8 @@ const csp = [
   // the browser never needs them; Clerk does. The Lemon Squeezy checkout is a
   // top-level redirect rather than an embedded frame, which is why no LS origin
   // appears anywhere in this policy: nothing of theirs is loaded into the page.
-  `connect-src 'self' ${clerkHttp} ${clerkWs} ${turnstile}`,
-  `frame-src 'self' ${clerkHttp} ${turnstile}`,
+  `connect-src 'self' ${clerkHttp} ${clerkWs} ${turnstile} ${paddle}`,
+  `frame-src 'self' ${clerkHttp} ${turnstile} ${paddle}`,
   "frame-ancestors 'self'",
   "base-uri 'self'",
   `form-action 'self' ${clerkHttp}`,

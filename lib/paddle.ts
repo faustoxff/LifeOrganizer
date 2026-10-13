@@ -70,42 +70,6 @@ export function planForPriceId(priceId: string | undefined): PaidPlanName | null
 }
 
 /**
- * Creates a transaction and returns the hosted checkout URL.
- *
- * A redirect rather than the Paddle.js overlay, for the same reason the
- * Lemon Squeezy flow was a redirect: the overlay injects a third-party script
- * and an iframe into the page, which needs a wider Content-Security-Policy and
- * gives the buyer a modal they cannot escape if it stalls. A server-side
- * transaction also means `custom_data` is ours to set, so attribution does not
- * depend on anything the browser supplies.
- */
-export async function createCheckout(params: {
-  plan: PaidPlanName;
-  userId: string;
-  /** Accepted by the hosted checkout; not sent. See the note on prefill below. */
-  email: string;
-}): Promise<string> {
-  const priceId = params.plan === "pro" ? process.env.PADDLE_PRICE_PRO : process.env.PADDLE_PRICE_PLUS;
-  if (!priceId) throw new Error(`PADDLE_PRICE_${params.plan.toUpperCase()} is not set`);
-
-  const paddle = getPaddle();
-  // The transaction is created before the user pays and abandoned if they
-  // close the tab. Paddle expires those; they are not subscriptions.
-  const transaction = await paddle.transactions.create({
-    items: [{ priceId, quantity: 1 }],
-    // Echoed back on every webhook for this transaction and its
-    // subscription. Attribution rides on this, not on the payer email: it is
-    // the only thing that survives a changed email or a re-created Clerk
-    // account.
-    customData: { user_id: params.userId, plan: params.plan }
-  });
-
-  const checkoutUrl = transaction.checkout?.url;
-  if (!checkoutUrl) throw new Error("Paddle returned no checkout URL");
-  return checkoutUrl;
-}
-
-/**
  * A subscription's price id, its custom-data user id and its status, in one
  * shape the webhook handler can use without knowing Paddle's event layout.
  */

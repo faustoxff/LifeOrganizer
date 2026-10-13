@@ -9,6 +9,7 @@ import { useAppLanguage } from "@/components/language-provider";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { LEGAL } from "@/lib/legal-config";
+import { usePaddleCheckout } from "@/lib/use-paddle-checkout";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
 
@@ -23,21 +24,23 @@ export function PlansPage() {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   const [error, setError] = useState("");
   const { trialAvailable, isLoaded } = useUserPlan();
+  const checkout = usePaddleCheckout();
 
   async function handleCheckout(planId: "plus" | "pro") {
     setError("");
+    const priceId = planId === "pro" ? process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO : process.env.NEXT_PUBLIC_PADDLE_PRICE_PLUS;
+    if (!priceId) {
+      setError(copy.errors.unexpected);
+      return;
+    }
     setLoadingPlan(planId);
     try {
-      const res = await fetch("/api/subscriptions/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planId }),
-      });
-      const data = (await res.json()) as { checkoutUrl?: string; error?: string };
-      if (!res.ok || !data.checkoutUrl) throw new Error(data.error ?? "checkout_failed");
-      window.location.href = data.checkoutUrl;
+      // Opens Paddle's checkout over the page. Nobody leaves the app, so a
+      // misclick is a closed modal rather than a lost session.
+      await checkout.open({ priceId });
     } catch {
       setError(copy.errors.unexpected);
+    } finally {
       setLoadingPlan(null);
     }
   }

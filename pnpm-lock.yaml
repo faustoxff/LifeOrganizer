@@ -17,6 +17,9 @@ importers:
       '@neondatabase/serverless':
         specifier: ^1.1.0
         version: 1.1.0
+      '@paddle/paddle-js':
+        specifier: ^1.6.5
+        version: 1.6.5
       '@paddle/paddle-node-sdk':
         specifier: ^3.10.0
         version: 3.10.0
@@ -942,6 +945,9 @@ packages:
 
   '@oxc-project/types@0.151.0':
     resolution: {integrity: sha512-J1yXrIlNDZVzE3ada310xeAw7nH8yCAyLPuUIsjKatFPmfn5bS1oW+cM+QsGOtVWd5nhSpbwZWx/rue+r5Z+PA==}
+
+  '@paddle/paddle-js@1.6.5':
+    resolution: {integrity: sha512-uFRvptUzYRqRlqTU5XmfcZWC9BGVYpZNdANd3giJjZbJlHesnE4gn8PyjtYpesU1ar2ZGPuJxHvrrSIV9jjdVw==}
 
   '@paddle/paddle-node-sdk@3.10.0':
     resolution: {integrity: sha512-njqp+L6e/2aR99EYh/Ulyu6B9sIyVERTFclGOznKmLZcy11pAwHoHyIgq1BUH1ybQH+YmJQmrrUQC/Rfg8JAAw==}
@@ -3942,6 +3948,8 @@ snapshots:
   '@nolyfill/is-core-module@1.0.39': {}
 
   '@oxc-project/types@0.151.0': {}
+
+  '@paddle/paddle-js@1.6.5': {}
 
   '@paddle/paddle-node-sdk@3.10.0': {}
 
