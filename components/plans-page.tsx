@@ -24,7 +24,12 @@ export function PlansPage() {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   const [error, setError] = useState("");
   const { trialAvailable, isLoaded } = useUserPlan();
-  const checkout = usePaddleCheckout();
+  // The webhook activates the plan, which lands a moment after Paddle reports
+  // the payment. Refreshing on completion closes that gap so the buyer is not
+  // looking at a stale "Free" badge while their subscription is already live.
+  const checkout = usePaddleCheckout(() => {
+    router.refresh();
+  });
 
   async function handleCheckout(planId: "plus" | "pro") {
     setError("");

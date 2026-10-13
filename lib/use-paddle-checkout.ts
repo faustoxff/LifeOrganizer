@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Paddle as PaddleNamespace, PaddleSetupOptions } from "@paddle/paddle-js";
+import type {
+  Paddle as PaddleNamespace,
+  PaddleEventData,
+  PaddleSetupOptions
+} from "@paddle/paddle-js";
 
 const PADDLE_SCRIPT = "https://cdn.paddle.com/paddle/v2/paddle.js";
 
@@ -56,7 +60,7 @@ function loadPaddle(): Promise<Paddle | null> {
   return paddlePromise;
 }
 
-export function usePaddleCheckout(): {
+export function usePaddleCheckout(onCompleted?: () => void): {
   open: (params: { priceId: string; email?: string }) => Promise<void>;
   ready: boolean;
 } {
@@ -78,7 +82,18 @@ export function usePaddleCheckout(): {
         if (!token || cancelled) return;
 
         tokenRef.current = token;
-        instance.Initialize({ token } as PaddleSetupOptions);
+        instance.Initialize({
+          token,
+          // The only way to learn that the payment went through from the
+          // browser. Without it the modal closes and the page underneath is
+          // unchanged — the buyer has paid and sees no confirmation at all,
+          // which is the worst possible outcome.
+          eventCallback: (event: PaddleEventData) => {
+            // The event's own name lives on `type`; `data` is the payload and
+            // is absent on some events, so it is not where the check goes.
+            if (event.type === "checkout.completed") onCompleted?.();
+          }
+        } as PaddleSetupOptions);
         if (!cancelled) setPaddle(instance);
       } catch {
         // Left uninitialised on purpose. The caller falls back to telling the
