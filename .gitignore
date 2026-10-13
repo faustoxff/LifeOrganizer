@@ -149,3 +149,6 @@ vite.config.ts.timestamp-*
 #   npx skills add https://developer.paddle.com/
 .agents/
 skills-lock.json
+
+# Agent tooling config — contains provider API keys
+.opencode/

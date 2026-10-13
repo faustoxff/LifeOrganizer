@@ -109,12 +109,11 @@ export async function createCheckout(params: {
  * A subscription's price id, its custom-data user id and its status, in one
  * shape the webhook handler can use without knowing Paddle's event layout.
  */
-export function readSubscription(event: { data: Subscription }): {
+export function readSubscription(sub: Subscription): {
   priceId: string | undefined;
   userId: string | undefined;
   status: SubscriptionStatus | null;
 } {
-  const sub = event.data;
   const custom = (sub as unknown as { customData?: { user_id?: string } }).customData;
   return {
     priceId: sub.items?.[0]?.price?.id,

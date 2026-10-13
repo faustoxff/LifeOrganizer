@@ -1,124 +1,105 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import {
-  verifyWebhookSignature,
-  readSignatureHeader,
-  planForVariant,
-  type PaidPlan,
-  type WebhookPayload,
-  type LsSubscriptionStatus
-} from "@/lib/lemonsqueezy";
+import { EventName, type EventEntity, type Subscription } from "@paddle/paddle-node-sdk";
+import { getPaddle, planForPriceId, readSubscription } from "@/lib/paddle";
 import { findUserIdByPreapprovalId, syncSubscription } from "@/lib/server-auth";
-import type { SubscriptionStatus } from "@/lib/subscription-plans";
+import type { PaidPlanName } from "@/lib/subscription-plans";
 
 /**
- * Lemon Squeezy signs the raw body; Mercado Pago signed query parameters and a
- * timestamp instead. Reading the body first and parsing second is the whole
- * difference: `request.json()` then re-stringify gives different bytes than
- * what was signed, so a valid delivery would fail the check forever.
+ * Receives Paddle webhooks.
+ *
+ * Two facts about the delivery shape the whole handler is built around:
+ *
+ *  - Only a `2xx` within five seconds counts as delivered. Every other status
+ *    is retried — live gets 60 attempts over roughly three days — so a failure
+ *    here is recoverable as long as we never answer `2xx` to something we did
+ *    not actually apply.
+ *  - The signature covers the raw bytes, so the body is read as text before
+ *    anything parses it. Re-serialising the JSON produces a different byte
+ *    string and every delivery would look forged.
  */
 export async function POST(request: Request) {
-  if (!process.env.LEMONSQUEEZY_WEBHOOK_SECRET && process.env.NODE_ENV === "production") {
-    // Fail closed. Payments would be taken and never granted otherwise, and
-    // there is no way for a user to notice before their plan is missing.
-    console.error("LEMONSQUEEZY_WEBHOOK_SECRET is not set; rejecting webhook");
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
-  }
-
   const rawBody = await request.text();
-  const signature = readSignatureHeader(request.headers);
+  const signature = request.headers.get("paddle-signature");
 
-  if (!verifyWebhookSignature(rawBody, signature)) {
-    // Enough to tell a wrong secret from a header under a name nobody reads,
-    // and nothing more. The digest itself is never echoed back: for a while a
-    // delivery could read the whole incoming header out of the 401 body, which
-    // is a needless disclosure of material produced with a payment secret.
-    const named = [...request.headers.keys()].filter((h) => /signature/i.test(h));
-    console.warn(
-      `Invalid Lemon Squeezy webhook signature (length: ${signature?.length ?? 0}, ` +
-        `headers: ${named.join(",") || "none"})`
-    );
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  if (!signature || !rawBody) {
+    return NextResponse.json({ error: "Missing signature or body" }, { status: 400 });
   }
 
-  let payload: WebhookPayload;
   try {
-    payload = JSON.parse(rawBody) as WebhookPayload;
-  } catch {
-    return NextResponse.json({ error: "Malformed payload" }, { status: 400 });
-  }
+    const paddle = getPaddle();
+    // Throws on a bad signature, an expired timestamp or a malformed payload.
+    const event = await paddle.webhooks.unmarshal(
+      rawBody,
+      process.env.PADDLE_NOTIFICATION_WEBHOOK_SECRET ?? "",
+      signature
+    );
+    if (!event) return NextResponse.json({ received: true });
 
-  const event = payload.meta?.event_name ?? "";
-  // Everything else (order_created, license_activated, ...) is acknowledged so
-  // Lemon Squeezy stops retrying, but nothing in the app depends on it.
-  if (!event.startsWith("subscription_")) {
+    await processEvent(event);
     return NextResponse.json({ received: true });
+  } catch (err) {
+    // One catch, one non-2xx. `unmarshal` throws the same for a forged request
+    // and for a rotated secret that has not been redeployed, so splitting the
+    // status codes would be theatre — and answering 2xx here would throw the
+    // event away instead of letting Paddle retry it.
+    console.error("Paddle webhook failed", err);
+    return NextResponse.json({ error: "Webhook failed" }, { status: 500 });
+  }
+}
+
+/**
+ * Paddle delivers at least once: the same event id arrives on every retry, so
+ * every branch here has to converge on the same state rather than accumulate.
+ * `syncSubscription` is an upsert keyed on user id, which makes that automatic.
+ */
+async function processEvent(event: EventEntity): Promise<void> {
+  switch (event.eventType) {
+    case EventName.SubscriptionCreated:
+    case EventName.SubscriptionUpdated:
+    case EventName.SubscriptionCanceled: {
+      // Narrowing on eventType is what makes `data` a Subscription rather than
+      // the union of every notification shape.
+      const sub = event.data as Subscription;
+      return syncSubscriptionEvent(sub);
+    }
+    default:
+      // Subscribed to events this app does not act on yet (customer.*,
+      // transaction.completed). Acknowledging them stops Paddle retrying a
+      // delivery that was never going to change anything.
+      return;
+  }
+}
+
+async function syncSubscriptionEvent(sub: Subscription): Promise<void> {
+  const { priceId, userId, status } = readSubscription(sub);
+  if (!status) return;
+
+  const plan: PaidPlanName | null = planForPriceId(priceId);
+  if (!plan) {
+    // A price that is not ours. Guessing a tier would hand someone a plan they
+    // did not buy, so the event is left unapplied for a human to look at.
+    console.error(`Paddle subscription on an unknown price ${priceId}; not granting a plan`);
+    return;
   }
 
-  const attributes = payload.data?.attributes;
-  if (!attributes) return NextResponse.json({ received: true });
-
-  const plan = planFromAttributes(payload);
-  const status = toSubscriptionStatus(attributes.status);
-  if (!plan || !status) {
-    return NextResponse.json({ received: true });
-  }
-
-  // Two ways to know whose subscription this is. The custom field is written
-  // on the checkout URL and echoed back here; the stored id is the fallback
-  // for events that arrive without it, which is how renewals behave.
-  const userId =
-    payload.meta?.custom_data?.user_id || (await findUserIdByPreapprovalId(payload.data.id));
-  if (!userId) {
-    console.error(`Cannot attribute subscription ${payload.data.id}: no user_id and no stored id`);
-    return NextResponse.json({ error: "Unknown subscription owner" }, { status: 500 });
+  const subscriptionId = sub.id;
+  const ownerId = userId || (await findUserIdByPreapprovalId(subscriptionId));
+  if (!ownerId) {
+    // Throwing keeps this a non-2xx so Paddle retries. Attribution can arrive
+    // on a later event even if it was missing here.
+    console.error(`Cannot attribute Paddle subscription ${subscriptionId}`);
+    throw new Error(`Unknown subscription owner: ${subscriptionId}`);
   }
 
   await syncSubscription({
-    userId,
+    userId: ownerId,
     plan,
-    mpPreapprovalId: payload.data.id,
-    // Lemon Squeezy does not put the email on the subscription payload, only a
-    // customer id. Passing empty lets syncSubscription keep whatever the
-    // checkout already recorded instead of blanking it on every renewal.
+    // The column is named for Mercado Pago's preapproval id and now holds
+    // whichever provider issued the subscription. No migration stands between
+    // an existing row and a working lookup.
+    mpPreapprovalId: subscriptionId,
     payerEmail: "",
     status
   });
-
-  return NextResponse.json({ received: true });
-}
-
-/**
- * The variant is the durable answer: it is on every event for the life of the
- * subscription. `custom_data.plan` only rides along when the checkout set it,
- * so it is the fallback rather than the source of truth.
- */
-function planFromAttributes(payload: WebhookPayload): PaidPlan | null {
-  const byVariant = planForVariant(payload.data?.attributes?.variant_id);
-  if (byVariant) return byVariant;
-
-  const declared = payload.meta?.custom_data?.plan;
-  return declared === "plus" || declared === "pro" ? declared : null;
-}
-
-/**
- * `past_due` and `unpaid` map to "paused", which resolvePlanForStatus treats as
- * a grace period: a retrying card must not take the plan away mid-dunning.
- * Lemon Squeezy eventually sends `cancelled`, which is what actually ends it.
- */
-function toSubscriptionStatus(status: LsSubscriptionStatus): SubscriptionStatus | null {
-  switch (status) {
-    case "on_trial":
-    case "active":
-      return "authorized";
-    case "paused":
-    case "past_due":
-    case "unpaid":
-      return "paused";
-    case "cancelled":
-    case "expired":
-      return "cancelled";
-    default:
-      return null;
-  }
 }

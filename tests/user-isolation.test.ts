@@ -103,7 +103,7 @@ describe("API routes", () => {
       const guarded =
         /requireAuth(WithEmail)?\s*\(/.test(source) ||
         /\bauthenticate(Paid)?\s*\(/.test(source) ||
-        /WebhookSignatureValidator|verifyWebhookSignature/.test(source);
+        /WebhookSignatureValidator|verifyWebhookSignature|webhooks\.unmarshal/.test(source);
       expect(guarded, `${route} has no identity check`).toBe(true);
     }
   });
