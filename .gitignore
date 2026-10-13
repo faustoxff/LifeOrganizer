@@ -144,3 +144,8 @@ vite.config.ts.timestamp-*
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Paddle agent skills — re-fetched with:
+#   npx skills add https://developer.paddle.com/
+.agents/
+skills-lock.json
