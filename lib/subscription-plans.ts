@@ -4,6 +4,34 @@
 export type PaidPlanName = "plus" | "pro";
 export type UserPlan = "free" | PaidPlanName;
 export type SubscriptionStatus = "authorized" | "paused" | "cancelled";
+/** A subscription's status exactly as Paddle reports it. */
+export type PaddleStatus = "active" | "trialing" | "past_due" | "paused" | "canceled";
+
+/**
+ * Whether a Paddle subscription currently grants the paid plan.
+ *
+ * `active` and `trialing` always do. `past_due` means a renewal charge failed
+ * and Paddle is retrying the card: the customer keeps the plan only while the
+ * period they already paid for has not ended, so a card that never recovers
+ * stops granting access on its own. `paused` and `canceled` never do —
+ * cancelling mid-period leaves the status `active` (with a scheduled change)
+ * until the period ends, so a customer who cancelled keeps what they paid for.
+ */
+export function paddleHasAccess(
+  status: PaddleStatus | string | null | undefined,
+  currentPeriodEnd: Date | null | undefined,
+  now: Date
+): boolean {
+  switch (status) {
+    case "active":
+    case "trialing":
+      return true;
+    case "past_due":
+      return currentPeriodEnd != null && currentPeriodEnd.getTime() > now.getTime();
+    default:
+      return false;
+  }
+}
 
 /**
  * Mercado Pago sends "cancelled" when a subscription really ends. A "paused"
