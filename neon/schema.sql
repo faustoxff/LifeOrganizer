@@ -26,6 +26,16 @@ CREATE TABLE IF NOT EXISTS user_plans (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Paddle Billing (aditivo; mismo contenido que neon/migrations/2026-10-paddle-subscription-columns.sql).
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS paddle_customer_id TEXT;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS paddle_status TEXT;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS paddle_price_id TEXT;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN;
+ALTER TABLE user_plans ADD COLUMN IF NOT EXISTS paddle_event_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS user_plans_paddle_subscription_id_key ON user_plans (paddle_subscription_id);
+
 -- Milo's per-user memory: a short AI-generated summary of patterns/preferences,
 -- refreshed periodically instead of storing full conversation history.
 CREATE TABLE IF NOT EXISTS user_memory (
