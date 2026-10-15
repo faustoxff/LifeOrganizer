@@ -37,14 +37,19 @@ for (const key of required) {
 // A missing webhook secret makes the route return 503, so payments would be
 // taken but never activate a plan — the single most expensive thing that can
 // be half-configured, because the customer has already been charged.
-if (!env.includes("PADDLE_NOTIFICATION_WEBHOOK_SECRET")) {
+if (!env.includes("PADDLE_WEBHOOK_SECRET") && !env.includes("PADDLE_NOTIFICATION_WEBHOOK_SECRET")) {
   blockers.push(
-    "PADDLE_NOTIFICATION_WEBHOOK_SECRET is not set — Paddle payments would be taken but never granted"
+    "PADDLE_WEBHOOK_SECRET is not set — Paddle payments would be taken but never granted"
   );
 }
 // Without these, createCheckout throws and checkout answers 502: the plans
 // page looks fine right up until someone presses the button.
-for (const key of ["PADDLE_API_KEY", "NEXT_PUBLIC_PADDLE_PRICE_PLUS", "NEXT_PUBLIC_PADDLE_PRICE_PRO"]) {
+for (const key of [
+  "PADDLE_API_KEY",
+  "NEXT_PUBLIC_PADDLE_CLIENT_TOKEN",
+  "NEXT_PUBLIC_PADDLE_PRICE_PLUS",
+  "NEXT_PUBLIC_PADDLE_PRICE_PRO"
+]) {
   if (!env.includes(key)) blockers.push(`${key} is not set — Plus/Pro checkout cannot be built`);
 }
 // sitemap.ts, robots.ts and metadataBase all fall back to http://localhost:3000,

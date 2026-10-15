@@ -6,7 +6,10 @@ import {
   type PaddleOptions,
   type Subscription
 } from "@paddle/paddle-node-sdk";
+import { paddleEnvironmentName } from "@/lib/paddle-config";
 import type { PaidPlanName, SubscriptionStatus } from "@/lib/subscription-plans";
+
+export { planForPriceId } from "@/lib/paddle-config";
 
 // Paddle is the merchant of record: it is the legal seller, it charges the
 // buyer, it collects and remits the sales tax for every country except the
@@ -22,7 +25,7 @@ export function getPaddle(): Paddle {
 
   const options: PaddleOptions = {
     environment:
-      (process.env.NEXT_PUBLIC_PADDLE_ENV as Environment) ?? Environment.sandbox,
+      paddleEnvironmentName() === "production" ? Environment.production : Environment.sandbox,
     logLevel: LogLevel.error
   };
   return new Paddle(apiKey, options);
@@ -52,21 +55,6 @@ export function toSubscriptionStatus(status: Subscription["status"]): Subscripti
     default:
       return null;
   }
-}
-
-/**
- * Which plan a subscription is on, from the price id on its line item.
- *
- * The price id is the durable answer: it is on every event for the life of the
- * subscription, including renewals nobody set a custom field for. Returns null
- * rather than guessing — attributing a payment to the wrong tier is worse than
- * not attributing it, and the caller falls back to `custom_data.plan`.
- */
-export function planForPriceId(priceId: string | undefined): PaidPlanName | null {
-  if (!priceId) return null;
-  if (priceId === process.env.PADDLE_PRICE_PRO) return "pro";
-  if (priceId === process.env.PADDLE_PRICE_PLUS) return "plus";
-  return null;
 }
 
 /**

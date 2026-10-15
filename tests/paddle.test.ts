@@ -64,3 +64,50 @@ describe("planForPriceId", () => {
     expect(planForPriceId("pri_plus")).toBeNull();
   });
 });
+import { priceIdFor, webhookSecret, paddleEnvironmentName } from "@/lib/paddle-config";
+
+describe("paddle-config", () => {
+  const keys = [
+    "NEXT_PUBLIC_PADDLE_PRICE_PLUS",
+    "NEXT_PUBLIC_PADDLE_PRICE_PRO",
+    "PADDLE_PRICE_PLUS",
+    "PADDLE_PRICE_PRO",
+    "PADDLE_WEBHOOK_SECRET",
+    "PADDLE_NOTIFICATION_WEBHOOK_SECRET",
+    "NEXT_PUBLIC_PADDLE_ENV"
+  ];
+  afterEach(() => {
+    for (const k of keys) delete process.env[k];
+  });
+
+  it("reads the price ids from the NEXT_PUBLIC variables, which is what the server used to miss", () => {
+    process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO = "pri_pro";
+    expect(planForPriceId("pri_pro")).toBe("pro");
+    expect(priceIdFor("pro")).toBe("pri_pro");
+  });
+
+  it("falls back to the legacy server-side names", () => {
+    process.env.PADDLE_PRICE_PLUS = "pri_plus_legacy";
+    expect(planForPriceId("pri_plus_legacy")).toBe("plus");
+  });
+
+  it("never maps an unknown or empty price to a plan", () => {
+    process.env.NEXT_PUBLIC_PADDLE_PRICE_PLUS = "pri_plus";
+    expect(planForPriceId("pri_other")).toBeNull();
+    expect(planForPriceId(undefined)).toBeNull();
+    expect(planForPriceId("")).toBeNull();
+  });
+
+  it("prefers PADDLE_WEBHOOK_SECRET and accepts the old name as an alias", () => {
+    process.env.PADDLE_NOTIFICATION_WEBHOOK_SECRET = "old";
+    expect(webhookSecret()).toBe("old");
+    process.env.PADDLE_WEBHOOK_SECRET = "new";
+    expect(webhookSecret()).toBe("new");
+  });
+
+  it("defaults to sandbox", () => {
+    expect(paddleEnvironmentName()).toBe("sandbox");
+    process.env.NEXT_PUBLIC_PADDLE_ENV = "production";
+    expect(paddleEnvironmentName()).toBe("production");
+  });
+});

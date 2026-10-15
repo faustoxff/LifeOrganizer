@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { getPaddle } from "@/lib/paddle";
+import { priceIdFor } from "@/lib/paddle-config";
 import { requireAuth } from "@/lib/server-auth";
 
 /**
@@ -30,8 +31,8 @@ export async function GET(request: Request) {
     const paddle = getPaddle();
 
     const items = [
-      { priceId: process.env.PADDLE_PRICE_PLUS, plan: "plus" },
-      { priceId: process.env.PADDLE_PRICE_PRO, plan: "pro" }
+      { priceId: priceIdFor("plus"), plan: "plus" },
+      { priceId: priceIdFor("pro"), plan: "pro" }
     ].filter((item) => item.priceId) as { priceId: string; plan: string }[];
 
     if (items.length === 0) {

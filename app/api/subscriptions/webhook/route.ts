@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { EventName, type EventEntity, type Subscription } from "@paddle/paddle-node-sdk";
-import { getPaddle, planForPriceId, readSubscription } from "@/lib/paddle";
+import { getPaddle, readSubscription } from "@/lib/paddle";
+import { planForPriceId, webhookSecret } from "@/lib/paddle-config";
 import { findUserIdByPreapprovalId, syncSubscription } from "@/lib/server-auth";
 import type { PaidPlanName } from "@/lib/subscription-plans";
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     // Throws on a bad signature, an expired timestamp or a malformed payload.
     const event = await paddle.webhooks.unmarshal(
       rawBody,
-      process.env.PADDLE_NOTIFICATION_WEBHOOK_SECRET ?? "",
+      webhookSecret() ?? "",
       signature
     );
     if (!event) return NextResponse.json({ received: true });

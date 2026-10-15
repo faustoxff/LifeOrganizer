@@ -9,6 +9,7 @@ import { useAppLanguage } from "@/components/language-provider";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { LEGAL } from "@/lib/legal-config";
+import { priceIdFor } from "@/lib/paddle-config";
 import { usePaddleCheckout } from "@/lib/use-paddle-checkout";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export function PlansPage() {
 
   async function handleCheckout(planId: "plus" | "pro") {
     setError("");
-    const priceId = planId === "pro" ? process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO : process.env.NEXT_PUBLIC_PADDLE_PRICE_PLUS;
+    const priceId = priceIdFor(planId);
     if (!priceId) {
       setError(copy.errors.unexpected);
       return;
