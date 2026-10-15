@@ -80,3 +80,61 @@ describe("resolveTrialView", () => {
     expect(resolveTrialView(row, now).trialEnded).toBe(false);
   });
 });
+
+import { isPaidPlan, resolveUserPlan, type PlanRow } from "@/lib/subscription-plans";
+
+describe("resolveUserPlan", () => {
+  const now = new Date("2026-10-15T00:00:00Z");
+  const future = new Date("2026-10-20T00:00:00Z");
+  const past = new Date("2026-10-10T00:00:00Z");
+  const base: PlanRow = { plan: "pro", trialEndsAt: null, subscriptionStatus: null, paddleStatus: null, currentPeriodEnd: null };
+  const paddle = (paddleStatus: string, currentPeriodEnd: Date | null, plan = "pro"): PlanRow => ({
+    ...base, plan, paddleStatus, currentPeriodEnd, subscriptionStatus: "authorized"
+  });
+
+  it("is free without a row", () => {
+    expect(resolveUserPlan(null, now)).toBe("free");
+    expect(resolveUserPlan(undefined, now)).toBe("free");
+  });
+
+  it("grants the stored tier while active or trialing", () => {
+    expect(resolveUserPlan(paddle("active", future), now)).toBe("pro");
+    expect(resolveUserPlan(paddle("trialing", future, "plus"), now)).toBe("plus");
+  });
+
+  it("keeps a cancelled-at-period-end customer on the plan (status stays active)", () => {
+    expect(resolveUserPlan(paddle("active", future), now)).toBe("pro");
+  });
+
+  it("keeps past_due while the paid period is valid and drops it afterwards", () => {
+    expect(resolveUserPlan(paddle("past_due", future), now)).toBe("pro");
+    expect(resolveUserPlan(paddle("past_due", past), now)).toBe("free");
+    expect(resolveUserPlan(paddle("past_due", null), now)).toBe("free");
+  });
+
+  it("revokes canceled and paused, even if a stale paid tier is stored", () => {
+    expect(resolveUserPlan(paddle("canceled", future), now)).toBe("free");
+    expect(resolveUserPlan(paddle("paused", future), now)).toBe("free");
+  });
+
+  it("never trusts the legacy status over Paddle's", () => {
+    // subscription_status 'authorized' is what the webhook writes for active;
+    // a canceled Paddle status must win even if the legacy column is stale.
+    expect(resolveUserPlan({ ...paddle("canceled", future), subscriptionStatus: "authorized" }, now)).toBe("free");
+  });
+
+  it("leaves accounts without Paddle exactly as before", () => {
+    expect(resolveUserPlan({ ...base, plan: "plus", subscriptionStatus: "authorized" }, now)).toBe("plus");
+    expect(resolveUserPlan({ ...base, plan: "pro", subscriptionStatus: "paused" }, now)).toBe("pro");
+    expect(resolveUserPlan({ ...base, plan: "plus", trialEndsAt: future }, now)).toBe("plus");
+    expect(resolveUserPlan({ ...base, plan: "plus", trialEndsAt: past }, now)).toBe("free");
+    expect(resolveUserPlan({ ...base, plan: "free" }, now)).toBe("free");
+    expect(resolveUserPlan({ ...base, plan: "pro", subscriptionStatus: "cancelled" }, now)).toBe("pro");
+  });
+
+  it("isPaidPlan", () => {
+    expect(isPaidPlan("plus")).toBe(true);
+    expect(isPaidPlan("pro")).toBe(true);
+    expect(isPaidPlan("free")).toBe(false);
+  });
+});

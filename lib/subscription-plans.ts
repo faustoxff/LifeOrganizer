@@ -84,3 +84,48 @@ export function resolveTrialView(row: TrialRow, now: Date): TrialView {
     trialEnded: inTrial && expired
   };
 }
+
+export type PlanRow = {
+  plan: string | null;
+  trialEndsAt: Date | null;
+  /** Legacy status (Mercado Pago era, and still written by the Paddle webhook). */
+  subscriptionStatus: SubscriptionStatus | null;
+  /** Status as Paddle reports it. Null for accounts that never had a Paddle subscription. */
+  paddleStatus: string | null;
+  currentPeriodEnd: Date | null;
+};
+
+/**
+ * THE place that decides which plan an account has. Every route reaches it
+ * through `getUserPlan`; nothing else reads the plan columns.
+ *
+ *  1. An account with a Paddle subscription is decided by `paddleHasAccess`:
+ *     active/trialing always, past_due only while the paid period has not ended,
+ *     paused/canceled never. The tier is the `plan` the webhook stored.
+ *  2. Otherwise the previous rules apply unchanged (Mercado Pago-era accounts
+ *     and trials), so nobody who is paying today loses anything.
+ *
+ * Only the verified webhook writes these columns; the browser can never move
+ * an account to a paid plan.
+ */
+export function resolveUserPlan(row: PlanRow | null | undefined, now: Date): UserPlan {
+  if (!row) return "free";
+  const tier: UserPlan = row.plan === "pro" ? "pro" : row.plan === "plus" ? "plus" : "free";
+
+  if (row.paddleStatus) {
+    return paddleHasAccess(row.paddleStatus, row.currentPeriodEnd, now) ? tier : "free";
+  }
+
+  // A live subscription is authoritative: the trial countdown must not demote
+  // someone who is actually paying.
+  if (row.subscriptionStatus === "authorized" || row.subscriptionStatus === "paused") {
+    return tier === "pro" ? "pro" : "plus";
+  }
+  if (tier === "plus" && row.trialEndsAt && row.trialEndsAt < now) return "free";
+  return tier;
+}
+
+/** Plus or Pro. */
+export function isPaidPlan(plan: UserPlan): plan is PaidPlanName {
+  return plan === "plus" || plan === "pro";
+}

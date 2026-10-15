@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { requireAuth, getUserPlanRow } from "@/lib/server-auth";
-import { resolveTrialView, type UserPlan } from "@/lib/subscription-plans";
+import { requireAuth, getUserPlanRow, planRowFrom } from "@/lib/server-auth";
+import { resolveTrialView, resolveUserPlan, type UserPlan } from "@/lib/subscription-plans";
 
 export async function GET() {
   let userId: string;
@@ -20,7 +20,11 @@ export async function GET() {
   const now = new Date();
   const { plan, trialAvailable, trialEnded } = resolveTrialView(
     {
-      plan: row.plan as UserPlan,
+      // Paddle accounts use the same decision every API route makes
+      // (getUserPlan): a past_due account whose paid period ended must not look
+      // Plus here either. Everyone else keeps the raw plan, because
+      // resolveTrialView needs it to notice that a trial has ended.
+      plan: row.paddle_status ? resolveUserPlan(planRowFrom(row), now) : (row.plan as UserPlan),
       trialEndsAt,
       mpPreapprovalId: row.mp_preapproval_id
     },
