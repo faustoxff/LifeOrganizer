@@ -9,6 +9,8 @@ import { useAppLanguage } from "@/components/language-provider";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { LEGAL } from "@/lib/legal-config";
+import { useUser } from "@clerk/nextjs";
+import { billingCopy } from "@/lib/billing-copy";
 import { priceIdFor } from "@/lib/paddle-config";
 import { usePaddleCheckout } from "@/lib/use-paddle-checkout";
 import { useUserPlan } from "@/lib/use-user-plan";
@@ -20,7 +22,10 @@ type PlanId = "free" | "plus" | "pro";
 
 export function PlansPage() {
   const router = useRouter();
-  const { copy } = useAppLanguage();
+  const { copy, language } = useAppLanguage();
+  const billing = billingCopy(language);
+  const { user } = useUser();
+  const [purchased, setPurchased] = useState(false);
   const plans = copy.plans;
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   const [error, setError] = useState("");
@@ -29,6 +34,7 @@ export function PlansPage() {
   // the payment. Refreshing on completion closes that gap so the buyer is not
   // looking at a stale "Free" badge while their subscription is already live.
   const checkout = usePaddleCheckout(() => {
+    setPurchased(true);
     router.refresh();
   });
 
@@ -43,9 +49,15 @@ export function PlansPage() {
     try {
       // Opens Paddle's checkout over the page. Nobody leaves the app, so a
       // misclick is a closed modal rather than a lost session.
-      await checkout.open({ priceId });
+      // The Clerk id and email tie the purchase to this account. The plan
+      // itself is still granted only by the verified webhook, never from here.
+      await checkout.open({
+        priceId,
+        userId: user?.id,
+        email: user?.primaryEmailAddress?.emailAddress
+      });
     } catch {
-      setError(copy.errors.unexpected);
+      setError(billing.checkoutNotReady);
     } finally {
       setLoadingPlan(null);
     }
@@ -275,6 +287,15 @@ export function PlansPage() {
         ))}
       </div>
 
+      {purchased && (
+        <div
+          role="status"
+          className="relative z-10 mt-4 max-w-md rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-center"
+        >
+          <p className="text-sm font-semibold text-foreground">{billing.checkoutSuccessTitle}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{billing.checkoutSuccessBody}</p>
+        </div>
+      )}
       {error && (
         <p className="relative z-10 mt-4 text-center text-sm text-destructive">{error}</p>
       )}

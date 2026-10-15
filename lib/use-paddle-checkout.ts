@@ -1,117 +1,84 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  Paddle as PaddleNamespace,
-  PaddleEventData,
-  PaddleSetupOptions
-} from "@paddle/paddle-js";
-
-const PADDLE_SCRIPT = "https://cdn.paddle.com/paddle/v2/paddle.js";
+import { initializePaddle, type Paddle, type PaddleEventData } from "@paddle/paddle-js";
+import { paddleEnvironmentName } from "@/lib/paddle-config";
 
 /**
  * Paddle's overlay checkout.
  *
  * Opens the payment page in place instead of redirecting to it, so a buyer who
- * closes the modal is still on the plans page with the trial state intact —
- * which is the failure this replaces: someone who misclicks was thrown to
- * Paddle's own site and had to find their way back.
+ * closes the modal is still on the plans page with the trial state intact.
  *
- * Two things are deliberately not here:
- *  - The API key. It never reaches the browser. The client is initialised with
- *    a short-lived client token minted server-side per session.
- *  - Any price arithmetic. Paddle decides what the buyer pays in their own
- *    currency and formats it; those strings are displayed as they arrive.
+ * Deliberately not here:
+ *  - The API key. Paddle.js is initialised with the public client-side token
+ *    (`NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`), which is scoped to opening checkouts
+ *    and reading prices. The server API key never reaches the browser.
+ *  - Access to anything. `checkout.completed` only closes the overlay and shows
+ *    a message; the plan is granted by the verified webhook, never by the
+ *    client.
+ *  - Price arithmetic. Paddle decides what the buyer pays in their own currency.
  */
 
-type Paddle = PaddleNamespace;
-let paddlePromise: Promise<Paddle | null> | null = null;
+// One initialisation per page, however many components ask. `initializePaddle`
+// loads paddle.js itself; calling it twice would register two event callbacks.
+let paddlePromise: Promise<Paddle | undefined> | null = null;
+let onCompletedRef: (() => void) | null = null;
 
-/** Loads paddle.js once per page, however many components ask for it. */
-function loadPaddle(): Promise<Paddle | null> {
-  if (typeof window === "undefined") return Promise.resolve(null);
-  if (paddlePromise) return paddlePromise;
+function getPaddle(): Promise<Paddle | undefined> {
+  if (typeof window === "undefined") return Promise.resolve(undefined);
+  const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+  if (!token) return Promise.resolve(undefined);
 
-  paddlePromise = new Promise((resolve) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src^="${PADDLE_SCRIPT}"]`);
-    if (existing) {
-      // The script fires a paddleInitialized event rather than resolving a
-      // promise, so an already-present tag still needs the listener.
-      if ((window as unknown as { Paddle?: Paddle }).Paddle) {
-        resolve((window as unknown as { Paddle?: Paddle }).Paddle ?? null);
-        return;
+  paddlePromise ??= initializePaddle({
+    // Without this a sandbox token is sent to the production endpoint.
+    environment: paddleEnvironmentName(),
+    token,
+    eventCallback: (event: PaddleEventData) => {
+      // TODO(verificar): paddle-js's types put the event name on `name` (and
+      // `type` is a separate field); the earlier code read `type`. Both are
+      // accepted until a sandbox purchase confirms which one fires.
+      if (event.name === "checkout.completed" || event.type === "checkout.completed") {
+        // Close the overlay ourselves so the confirmation message is visible.
+        window.Paddle?.Checkout.close();
+        onCompletedRef?.();
       }
-      window.addEventListener("paddleInitialized", () => {
-        resolve((window as unknown as { Paddle?: Paddle }).Paddle ?? null);
-      });
-      return;
     }
-
-    const script = document.createElement("script");
-    script.src = PADDLE_SCRIPT;
-    script.async = true;
-    script.onload = () => {
-      resolve((window as unknown as { Paddle?: Paddle }).Paddle ?? null);
-    };
-    script.onerror = () => resolve(null);
-    document.head.appendChild(script);
-  });
-
+  }).catch(() => undefined);
   return paddlePromise;
 }
 
 export function usePaddleCheckout(onCompleted?: () => void): {
-  open: (params: { priceId: string; email?: string }) => Promise<void>;
+  open: (params: { priceId: string; email?: string; userId?: string }) => Promise<void>;
   ready: boolean;
 } {
   const [paddle, setPaddle] = useState<Paddle | null>(null);
-  const tokenRef = useRef<string | null>(null);
+  const completedRef = useRef(onCompleted);
+  completedRef.current = onCompleted;
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      const instance = await loadPaddle();
-      if (!instance || cancelled) return;
-
-      try {
-        // Minted per session, never long-lived: it is public material and a
-        // leaked one expires on its own.
-        const res = await fetch("/api/paddle/client-token", { method: "POST" });
-        if (!res.ok) return;
-        const { token } = (await res.json()) as { token?: string };
-        if (!token || cancelled) return;
-
-        tokenRef.current = token;
-        instance.Initialize({
-          token,
-          // The only way to learn that the payment went through from the
-          // browser. Without it the modal closes and the page underneath is
-          // unchanged — the buyer has paid and sees no confirmation at all,
-          // which is the worst possible outcome.
-          eventCallback: (event: PaddleEventData) => {
-            // The event's own name lives on `type`; `data` is the payload and
-            // is absent on some events, so it is not where the check goes.
-            if (event.type === "checkout.completed") onCompleted?.();
-          }
-        } as PaddleSetupOptions);
-        if (!cancelled) setPaddle(instance);
-      } catch {
-        // Left uninitialised on purpose. The caller falls back to telling the
-        // user plainly rather than opening a checkout that cannot work.
-      }
-    })();
+    const handler = () => completedRef.current?.();
+    onCompletedRef = handler;
+    void getPaddle().then((instance) => {
+      if (instance && !cancelled) setPaddle(instance);
+    });
     return () => {
       cancelled = true;
+      if (onCompletedRef === handler) onCompletedRef = null;
     };
   }, []);
 
   const open = useCallback(
-    async ({ priceId, email }: { priceId: string; email?: string }) => {
+    async ({ priceId, email, userId }: { priceId: string; email?: string; userId?: string }) => {
       if (!paddle) throw new Error("checkout_not_ready");
       await paddle.Checkout.open({
         items: [{ priceId, quantity: 1 }],
         settings: { displayMode: "overlay", variant: "one-page" },
-        ...(email ? { customer: { email } } : {})
+        ...(email ? { customer: { email } } : {}),
+        // Ties the purchase to the signed-in account. The webhook reads
+        // `custom_data.user_id`; it is a hint, and the webhook still decides.
+        ...(userId ? { customData: { user_id: userId } } : {})
       });
     },
     [paddle]
