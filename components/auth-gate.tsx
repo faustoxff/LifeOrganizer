@@ -2,7 +2,6 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
-import { MiloLoader } from "@/components/milo-loader";
 import { LoginForm } from "@/components/login-form";
 
 type AuthContextValue = {

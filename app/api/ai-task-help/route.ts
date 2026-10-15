@@ -8,7 +8,6 @@ import { requireAuth, getUserPlan } from "@/lib/server-auth";
 import { consumeDailyUsage } from "@/lib/usage-limits";
 
 const MAX_QUESTION_LENGTH = 2000;
-const MAX_FIELD_LENGTH = 2000;
 import {
   chatWithMilo,
   getMiloErrorMessage,

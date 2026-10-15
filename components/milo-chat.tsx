@@ -69,8 +69,6 @@ type Message = {
   taskCreated?: boolean;
 };
 
-type PersistedMessage = Pick<Message, "role" | "content">;
-
 type MiloCopy = {
   briefingGoodMorning: string;
   briefingGoodAfternoon: string;
