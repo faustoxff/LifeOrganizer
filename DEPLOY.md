@@ -19,35 +19,39 @@ variables de `.env.example` (`.env.local` es gitignored, no se sube solo).
 
 Al deploying tenés una URL pública HTTPS. **Ese es el objetivo de este paso.**
 
-## Paso 2 — Lemon Squeezy: webhook
+## Paso 2 — Paddle: webhook
 
-Recién ahora, porque necesita la URL del paso 1.
+Recién ahora, porque necesita la URL del paso 1. La guía completa (sandbox,
+ngrok, tarjeta de prueba y checklist de producción) está en
+[`docs/PADDLE.md`](docs/PADDLE.md). Resumen:
 
-1. app.lemonsqueezy.com → **Settings → Webhooks → New endpoint**
-2. Callback URL: `https://<tu-dominio>/api/subscriptions/webhook`
-3. Eventos: `subscription_created`, `subscription_updated`,
-   `subscription_cancelled`, `subscription_payment_failed`
-4. Te devuelve un **signing secret** → `LEMONSQUEEZY_WEBHOOK_SECRET`
+1. Corré la migración `neon/migrations/2026-10-paddle-subscription-columns.sql`
+   (primero en una branch de Neon).
+2. Paddle → **Developer tools → Notifications → New destination**
+3. URL: `https://<tu-dominio>/api/subscriptions/webhook`
+4. Eventos: `subscription.created`, `subscription.updated`,
+   `subscription.canceled`, `subscription.past_due` y `transaction.completed`
+   (la guía lista también `activated`, `paused`, `resumed` y `trialing`)
+5. Te devuelve una **secret key** → `PADDLE_WEBHOOK_SECRET`
 
-El checkout se arma con una URL alojada que ya incluye el `variant_id`, así que
-no hay preapproval ni llamada de creación de por medio. Actualizá la variable en
-Vercel y rebuildea. Sin el signing secret, la ruta devuelve 503 en producción:
-se cobra la plata y el plan nunca se activa.
+Sin la secret key la ruta responde 500 y Paddle reintenta: se cobra la plata pero
+el plan no se activa hasta que la variable exista. Con una firma inválida responde
+401.
 
-## Paso 3 — Probá un pago real
+## Paso 3 — Probá un pago (sandbox primero)
 
-Esto es lo que valida el arreglo de billing. Nadie lo puede hacer por vos.
+Esto es lo que valida el circuito de cobro. Nadie lo puede hacer por vos.
 
 1. Entrá a la app con una cuenta de prueba
-2. `/plans` → elegir Plus → checkout
-3. Pagá con una tarjeta de prueba de MP
+2. `/plans` → elegir Pro → checkout
+3. Pagá con la tarjeta de prueba de Paddle (ver `docs/PADDLE.md`)
 4. Esperá el webhook
-5. Verificá en la base que `user_plans` tenga `plan = 'plus'` y
-   `subscription_status = 'authorized'`
+5. Verificá en la base que `user_plans` tenga `plan = 'pro'` y
+   `paddle_status = 'active'`
 
-Si `authorized` está y el plan aparece, el circuito está cerrado.
-Si la fila no cambió, el webhook no llegó: revisá el secret y que la URL sea
-exacta (sin slash al final, sin `www` si el dominio no lo tiene).
+Si el plan aparece, el circuito está cerrado. Si la fila no cambió, el webhook no
+llegó: revisá el secret y que la URL sea exacta (sin slash al final, sin `www` si
+el dominio no lo tiene).
 
 ## Paso 4 — Clerk a producción (obligatorio antes de vender)
 
@@ -60,8 +64,8 @@ cookies que no son de producción.
 4. Traé `pk_live_` / `sk_live_` a Vercel y rebuildea
 
 **Chequeo de seguridad:** en `app/api/subscriptions/webhook/route.ts`, si
-`MP_WEBHOOK_SECRET` falta en producción la ruta devuelve 503. Confirmá que en
-Vercel la variable existe con mayúsculas exactas.
+`PADDLE_WEBHOOK_SECRET` falta la ruta devuelve 500. Confirmá que en Vercel la
+variable existe con mayúsculas exactas.
 
 ## AI: el segundo provider (recomendado antes de tener usuarios)
 

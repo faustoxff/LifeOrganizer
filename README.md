@@ -21,7 +21,7 @@ Spark elige una sola tarea, la divide en pasos de dos minutos y pone un temporiz
 - **Neon** (Postgres) — tareas, planes, memoria de Milo y contadores de uso
 - **Groq** — modelos de lenguaje
 - **Tavily / SearXNG** — búsqueda web
-- **Lemon Squeezy** — suscripciones y pagos (merchant of record)
+- **Paddle Billing** — suscripciones y pagos (merchant of record); ver `docs/PADDLE.md`
 
 ## Correr localmente
 
@@ -65,9 +65,7 @@ volver a correr cuando se agregan tablas o columnas.
 
 1. Completar los datos del responsable en `lib/legal-config.ts` (CUIT, domicilio, email).
 2. Revisión legal de `lib/legal-content.ts`.
-3. Claves de producción de Clerk y Lemon Squeezy, y credenciales propias de cada
+3. Claves de producción de Clerk y de Paddle, y credenciales propias de cada
    proveedor social.
-4. Configurar el webhook de Lemon Squeezy en `/api/subscriptions/webhook`
-   (`subscription_created`, `subscription_updated`, `subscription_cancelled`,
-   `subscription_payment_failed`) con el signing secret como
-   `LEMONSQUEEZY_WEBHOOK_SECRET`.
+4. Configurar el webhook de Paddle en `/api/subscriptions/webhook` con su secret
+   como `PADDLE_WEBHOOK_SECRET` y seguir la checklist de `docs/PADDLE.md`.
