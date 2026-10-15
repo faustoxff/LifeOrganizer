@@ -8,6 +8,9 @@ export function LegalLinks({ className = "" }: { className?: string }) {
   const es = language === "es";
   return (
     <nav className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground ${className}`}>
+      <Link href="/pricing" className="hover:underline">
+        {es ? "Precios" : "Pricing"}
+      </Link>
       <Link href="/terms" className="hover:underline">
         {es ? "Términos y condiciones" : "Terms of Service"}
       </Link>
