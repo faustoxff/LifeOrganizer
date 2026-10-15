@@ -13,7 +13,7 @@ export async function GET() {
 
   const row = await getUserPlanRow(userId);
   if (!row) {
-    return NextResponse.json({ plan: "free", trialEndsAt: null, trialAvailable: true, trialEnded: false });
+    return NextResponse.json({ plan: "free", trialEndsAt: null, trialAvailable: true, trialEnded: false, subscription: null });
   }
 
   const trialEndsAt = row.trial_ends_at ? new Date(row.trial_ends_at) : null;
@@ -35,6 +35,15 @@ export async function GET() {
     plan,
     trialEndsAt: trialEndsAt !== null && trialEndsAt < now ? null : trialEndsAt?.toISOString() ?? null,
     trialAvailable,
-    trialEnded
+    trialEnded,
+    // What the settings screen shows. Null for accounts that never paid through Paddle.
+    subscription: row.paddle_status
+      ? {
+          status: row.paddle_status as string,
+          currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end).toISOString() : null,
+          cancelAtPeriodEnd: row.cancel_at_period_end === true,
+          canManage: Boolean(row.paddle_customer_id)
+        }
+      : null
   });
 }

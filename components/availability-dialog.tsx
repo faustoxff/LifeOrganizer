@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { PrepSettingsSection } from "@/components/prep-settings";
+import { SubscriptionSection } from "@/components/subscription-section";
 import { DEFAULT_AVAILABILITY, type Availability } from "@/lib/availability";
 import { weekdayLongName } from "@/lib/repeat-label";
 import { formatMinutes } from "@/lib/task-estimate";
@@ -96,6 +97,7 @@ export function AvailabilityDialog({ mode, initial, onSave, onClose }: Props) {
         </ul>
 
         {mode === "settings" && <PrepSettingsSection />}
+        {mode === "settings" && <SubscriptionSection />}
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
           <Button type="button" disabled={isSaving} onClick={() => void save(values)}>

@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 
 export type UserPlan = "free" | "plus" | "pro";
 
+export type SubscriptionInfo = {
+  /** Paddle's status: active | trialing | past_due | paused | canceled */
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  canManage: boolean;
+};
+
 type PlanResponse = {
+  subscription?: SubscriptionInfo | null;
   plan: UserPlan;
   trialEndsAt: string | null;
   trialAvailable?: boolean;
@@ -21,6 +30,7 @@ export function useUserPlan() {
   // dead end.
   const [trialAvailable, setTrialAvailable] = useState(true);
   const [trialEnded, setTrialEnded] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +44,7 @@ export function useUserPlan() {
         setTrialEndsAt(data.trialEndsAt ? new Date(data.trialEndsAt) : null);
         setTrialAvailable(data.trialAvailable ?? true);
         setTrialEnded(data.trialEnded ?? false);
+        setSubscription(data.subscription ?? null);
       } catch {
         if (active) setPlan("free");
       } finally {
@@ -50,5 +61,5 @@ export function useUserPlan() {
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
     : null;
 
-  return { plan, trialEndsAt, trialDaysLeft, trialAvailable, trialEnded, isLoaded };
+  return { plan, trialEndsAt, trialDaysLeft, trialAvailable, trialEnded, subscription, isLoaded };
 }
