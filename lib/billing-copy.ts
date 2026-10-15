@@ -8,6 +8,7 @@ export type BillingCopy = {
   checkoutSuccessTitle: string;
   checkoutSuccessBody: string;
   checkoutNotReady: string;
+  taxNote: string;
   settings: {
     title: string;
     plan: string;
@@ -30,6 +31,8 @@ const en: BillingCopy = {
   checkoutSuccessBody:
     "Your plan switches on in a few seconds, as soon as Paddle confirms the payment. If it still shows Free in a minute, reload the page.",
   checkoutNotReady: "The checkout is not ready yet. Reload the page and try again.",
+  taxNote:
+    "Prices are per month and billed in US dollars, or in your local currency where available. Paddle is our Merchant of Record: it processes the payment and calculates, collects and remits the applicable taxes, which you see before you pay. Cancel any time; you keep access until the end of the period you paid for.",
   settings: {
     title: "Subscription",
     plan: "Current plan",
@@ -52,6 +55,8 @@ const es: BillingCopy = {
   checkoutSuccessBody:
     "Tu plan se activa en unos segundos, apenas Paddle confirma el pago. Si en un minuto sigue figurando Free, recargá la página.",
   checkoutNotReady: "El checkout todavía no está listo. Recargá la página y probá de nuevo.",
+  taxNote:
+    "Los precios son por mes y se cobran en dólares estadounidenses, o en tu moneda local cuando está disponible. Paddle es nuestro Merchant of Record: procesa el pago y calcula, cobra y remite los impuestos aplicables, que ves antes de pagar. Cancelás cuando quieras y conservás el acceso hasta el final del período pagado.",
   settings: {
     title: "Suscripción",
     plan: "Plan actual",

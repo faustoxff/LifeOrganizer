@@ -32,8 +32,8 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Planes, precios y pagos",
         body: [
-          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios de referencia son USD ${LEGAL.prices.plus} (Plus) y USD ${LEGAL.prices.pro} (Pro) por mes. En Argentina los cobros pueden realizarse en pesos argentinos a través de Lemon Squeezy, según el valor informado al momento de suscribirte.`,
-          "Los pagos son procesados por Lemon Squeezy, que actúa como merchant of record: cobra, liquida y presenta el impuesto correspondiente, por lo que el Responsable no almacena los datos de tu tarjeta.",
+          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios de referencia son USD ${LEGAL.prices.plus} (Plus) y USD ${LEGAL.prices.pro} (Pro) por mes. Antes de confirmar el pago, Paddle te muestra el importe final en tu moneda local (cuando está disponible) con los impuestos aplicables.`,
+          "Los pagos son procesados por Paddle, que actúa como Merchant of Record: es quien te vende la suscripción, cobra, calcula y remite los impuestos aplicables (IVA, sales tax u otros) y emite el recibo, por lo que el Responsable no almacena los datos de tu tarjeta. La compra también se rige por los términos del comprador de Paddle.",
           `El plan Plus puede incluir un período de prueba gratuito de ${LEGAL.trialDays} días, por única vez por persona. Los planes y precios pueden modificarse; los cambios se comunican con anticipación y no afectan el período ya abonado.`,
           "Los límites de uso diario de las funciones de IA dependen del plan y pueden ajustarse."
         ]
@@ -43,7 +43,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
         body: [
           "La suscripción se renueva automáticamente cada mes hasta que la canceles. Puedes cancelarla en cualquier momento desde tu cuenta o escribiendo a " + MAIL + "; seguirás con acceso al plan hasta el final del período ya pagado, sin cargos posteriores.",
           "Si contrataste a distancia desde Argentina, tienes derecho a revocar la contratación dentro de los 10 días corridos desde que la contrataste (art. 34 de la Ley 24.240 de Defensa del Consumidor), pidiéndolo a " + MAIL + ". En ese caso se reembolsa el importe pagado.",
-          "Fuera de ese plazo, y salvo que la ley disponga otra cosa, los períodos ya iniciados no se reembolsan."
+          "Fuera de ese plazo, y salvo que la ley disponga otra cosa, los períodos ya iniciados no se reembolsan. La política completa está en /refund."
         ]
       },
       {
@@ -106,8 +106,8 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Plans, prices and payments",
         body: [
-          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Reference prices are USD ${LEGAL.prices.plus} (Plus) and USD ${LEGAL.prices.pro} (Pro) per month. In Argentina, charges may be made in Argentine pesos through Lemon Squeezy at the amount shown when you subscribe.`,
-          "Payments are processed by Lemon Squeezy, which acts as merchant of record: it collects the payment, settles and files the applicable tax, so the Operator does not store your card details.",
+          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Reference prices are USD ${LEGAL.prices.plus} (Plus) and USD ${LEGAL.prices.pro} (Pro) per month. Before you confirm the payment, Paddle shows you the final amount in your local currency (where available) including any applicable taxes.`,
+          "Payments are processed by Paddle, which acts as Merchant of Record: it sells you the subscription, collects the payment, calculates and remits the applicable taxes (VAT, sales tax or others) and issues the receipt, so the Operator does not store your card details. Your purchase is also governed by Paddle's buyer terms.",
           `The Plus plan may include a free ${LEGAL.trialDays}-day trial, once per person. Plans and prices may change; changes are announced in advance and do not affect an already-paid period.`,
           "Daily usage limits for AI features depend on your plan and may be adjusted."
         ]
@@ -117,7 +117,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
         body: [
           "Subscriptions renew automatically every month until you cancel. You can cancel at any time from your account or by writing to " + MAIL + "; you keep access until the end of the period you already paid for, with no further charges.",
           "If you purchased remotely from Argentina, you may withdraw within 10 calendar days of purchase (Argentine Consumer Protection Law 24.240, art. 34) by writing to " + MAIL + ", and the amount paid will be refunded.",
-          "Outside that window, and unless the law provides otherwise, periods already started are not refunded."
+          "Outside that window, and unless the law provides otherwise, periods already started are not refunded. The full policy is at /refund."
         ]
       },
       {
@@ -177,7 +177,7 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Con quién los compartimos",
         body: [
-          "Usamos proveedores que tratan datos por nuestra cuenta: Clerk (autenticación), Neon (base de datos), Vercel (alojamiento), Groq (modelos de IA que procesan tus mensajes y tareas), Tavily (búsqueda web cuando Milo la usa; se envían los términos de la consulta), Lemon Squeezy (procesamiento de pagos).",
+          "Usamos proveedores que tratan datos por nuestra cuenta: Clerk (autenticación), Neon (base de datos), Vercel (alojamiento), Groq (modelos de IA que procesan tus mensajes y tareas), Tavily (búsqueda web cuando Milo la usa; se envían los términos de la consulta), Paddle (procesamiento de pagos y facturación, como Merchant of Record).",
           "Estos proveedores pueden estar ubicados fuera de Argentina, incluidos Estados Unidos, por lo que tus datos pueden transferirse internacionalmente. Solo los compartimos en la medida necesaria para prestar el Servicio."
         ]
       },
@@ -244,7 +244,7 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Who we share it with",
         body: [
-          "We use providers that process data on our behalf: Clerk (authentication), Neon (database), Vercel (hosting), Groq (AI models that process your messages and tasks), Tavily (web search when Milo uses it; the query terms are sent), Lemon Squeezy (payment processing).",
+          "We use providers that process data on our behalf: Clerk (authentication), Neon (database), Vercel (hosting), Groq (AI models that process your messages and tasks), Tavily (web search when Milo uses it; the query terms are sent), Paddle (payment processing and invoicing, as Merchant of Record).",
           "These providers may be located outside Argentina, including the United States, so your data may be transferred internationally. We share it only as needed to provide the Service."
         ]
       },
@@ -285,6 +285,113 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
         title: "Minors and changes",
         body: [
           "The Service is not directed at people under 18. We may update this policy; we will publish the new version with its date and notify you of important changes."
+        ]
+      }
+    ]
+  }
+};
+
+/**
+ * Borrador de la política de reembolsos. Todo lo marcado [REVISAR] es una decisión del Responsable:
+ * `npm run check:release` falla mientras quede alguno, para que no se publique sin resolverlo.
+ */
+export const refundContent: { es: LegalContent; en: LegalContent } = {
+  es: {
+    title: "Política de reembolsos",
+    intro: `Esta política complementa los Términos y condiciones de ${S}. Los pagos los procesa Paddle, que actúa como Merchant of Record; los reembolsos se emiten a través de Paddle al mismo medio de pago con el que pagaste.`,
+    sections: [
+      {
+        title: "Prueba gratuita",
+        body: [
+          `El plan Plus incluye una prueba gratuita de ${LEGAL.trialDays} días, por única vez por persona y sin cargar tarjeta. Durante la prueba no se cobra nada, así que no hay nada que reembolsar.`
+        ]
+      },
+      {
+        title: "Reembolso de tu primer pago",
+        body: [
+          `Si no estás conforme, puedes pedir el reembolso total de tu primer pago dentro de los [REVISAR: 14] días corridos desde la compra, escribiendo a ${MAIL}. [REVISAR: el plazo no puede ser menor a 10 días corridos, que es el derecho de revocación del art. 34 de la Ley 24.240 que ya figura en los Términos; unificar ambos números].`,
+          "Aplica a la primera suscripción de cada persona a cada plan."
+        ]
+      },
+      {
+        title: "Renovaciones y cancelación",
+        body: [
+          "La suscripción se renueva cada mes hasta que la canceles. Cancelar evita los cobros siguientes y conservas el acceso hasta el final del período ya pagado.",
+          "[REVISAR: elegir una de estas dos] (a) Las renovaciones ya cobradas no se reembolsan, salvo cobro erróneo o duplicado. (b) Puedes pedir el reembolso de una renovación dentro de los [N] días de cobrada."
+        ]
+      },
+      {
+        title: "Cobros duplicados o erróneos",
+        body: [
+          `Si te cobraron dos veces o un importe incorrecto, escríbenos a ${MAIL} y lo reembolsamos completo, sin importar el plazo.`
+        ]
+      },
+      {
+        title: "Cómo pedirlo",
+        body: [
+          `Escribe a ${MAIL} desde el email de tu cuenta, con la fecha aproximada de la compra. Respondemos en [REVISAR: 5] días hábiles. Una vez aprobado, Paddle emite el reembolso y la acreditación puede demorar varios días hábiles según tu banco o tarjeta.`
+        ]
+      },
+      {
+        title: "Importe, impuestos y moneda",
+        body: [
+          "Se reembolsa el importe que pagaste, impuestos incluidos, en la moneda en que pagaste. [REVISAR: confirmar si se compensan diferencias de tipo de cambio; lo habitual es que no]."
+        ]
+      },
+      {
+        title: "Jurisdicción y derechos del consumidor",
+        body: [
+          "Esta política se rige por las leyes de la República Argentina. [REVISAR: confirmar jurisdicción y, si corresponde, tribunales competentes]. No afecta los derechos que la ley te reconoce como consumidor y que no pueden renunciarse."
+        ]
+      }
+    ]
+  },
+  en: {
+    title: "Refund Policy",
+    intro: `This policy supplements the ${S} Terms of Service. Payments are processed by Paddle, which acts as Merchant of Record; refunds are issued through Paddle to the payment method you used.`,
+    sections: [
+      {
+        title: "Free trial",
+        body: [
+          `The Plus plan includes a free ${LEGAL.trialDays}-day trial, once per person and without entering a card. Nothing is charged during the trial, so there is nothing to refund.`
+        ]
+      },
+      {
+        title: "Refund of your first payment",
+        body: [
+          `If you are not satisfied, you can request a full refund of your first payment within [REVISAR: 14] calendar days of purchase by writing to ${MAIL}. [REVISAR: the window cannot be shorter than 10 calendar days, the withdrawal right (Law 24.240, art. 34) already stated in the Terms; align both numbers].`,
+          "This applies to each person's first subscription to each plan."
+        ]
+      },
+      {
+        title: "Renewals and cancellation",
+        body: [
+          "Subscriptions renew every month until you cancel. Cancelling stops future charges and you keep access until the end of the period you already paid for.",
+          "[REVISAR: pick one] (a) Renewals already charged are not refunded, except for erroneous or duplicate charges. (b) You may request a refund of a renewal within [N] days of the charge."
+        ]
+      },
+      {
+        title: "Duplicate or erroneous charges",
+        body: [
+          `If you were charged twice or an incorrect amount, write to ${MAIL} and we will refund it in full, regardless of the time elapsed.`
+        ]
+      },
+      {
+        title: "How to request one",
+        body: [
+          `Write to ${MAIL} from your account email, with the approximate date of purchase. We reply within [REVISAR: 5] business days. Once approved, Paddle issues the refund and it may take several business days to reach your bank or card.`
+        ]
+      },
+      {
+        title: "Amount, taxes and currency",
+        body: [
+          "You are refunded the amount you paid, taxes included, in the currency you paid in. [REVISAR: confirm whether exchange-rate differences are compensated; usually they are not]."
+        ]
+      },
+      {
+        title: "Jurisdiction and consumer rights",
+        body: [
+          "This policy is governed by the laws of the Argentine Republic. [REVISAR: confirm jurisdiction and, if applicable, competent courts]. It does not affect the rights the law gives you as a consumer that cannot be waived."
         ]
       }
     ]

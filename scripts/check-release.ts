@@ -28,6 +28,15 @@ for (const field of ["operatorTaxId", "operatorAddress", "contactEmail"]) {
   }
 }
 
+// --- Legal drafts must have every [REVISAR] decision resolved ----------------
+// The /refund draft (and any other legal text) marks the choices that are the
+// operator's to make with "[REVISAR: ...]". Shipping one publishes the note.
+const legalSource = readFileSync("lib/legal-content.ts", "utf8");
+const pending = legalSource.match(/\[REVISAR[^\]]*\]/g) ?? [];
+if (pending.length > 0) {
+  blockers.push(`lib/legal-content.ts still has ${pending.length} [REVISAR] marker(s) — resolve them before publishing /refund`);
+}
+
 // --- Required environment variables ---------------------------------------
 const required = ["CLERK_SECRET_KEY", "DATABASE_URL", "GROQ_API_KEY"];
 for (const key of required) {

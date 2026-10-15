@@ -14,6 +14,9 @@ export function LegalLinks({ className = "" }: { className?: string }) {
       <Link href="/privacy" className="hover:underline">
         {es ? "Política de privacidad" : "Privacy Policy"}
       </Link>
+      <Link href="/refund" className="hover:underline">
+        {es ? "Política de reembolsos" : "Refund Policy"}
+      </Link>
     </nav>
   );
 }

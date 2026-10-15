@@ -6,13 +6,12 @@ import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAppLanguage } from "@/components/language-provider";
-import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { LEGAL } from "@/lib/legal-config";
 import { useUser } from "@clerk/nextjs";
 import { billingCopy } from "@/lib/billing-copy";
 import { priceIdFor } from "@/lib/paddle-config";
-import { usePaddleCheckout } from "@/lib/use-paddle-checkout";
+import { useLocalizedPrices, usePaddleCheckout } from "@/lib/use-paddle-checkout";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +24,9 @@ export function PlansPage() {
   const { copy, language } = useAppLanguage();
   const billing = billingCopy(language);
   const { user } = useUser();
+  // Paddle's own formatted total in the buyer's currency, once it loads. Until
+  // then (or if it never does) the USD list price below is what is shown.
+  const localizedPrices = useLocalizedPrices();
   const [purchased, setPurchased] = useState(false);
   const plans = copy.plans;
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
@@ -114,7 +116,7 @@ export function PlansPage() {
     {
       id: "plus",
       name: "Plus",
-      price: 9000,
+      price: LEGAL.prices.plus,
       description: "",
       highlighted: true,
       trial: true,
@@ -123,7 +125,7 @@ export function PlansPage() {
     {
       id: "pro",
       name: "Pro",
-      price: 30000,
+      price: LEGAL.prices.pro,
       description: "",
       highlighted: false,
       trial: false,
@@ -199,28 +201,14 @@ export function PlansPage() {
                   {plan.price ? (
                     <>
                       <span className="text-4xl font-bold">
-                        $<AnimatedNumber value={plan.price} format={(n) => n.toLocaleString("es-AR")} />
+                        {localizedPrices[plan.id] ?? `US$${plan.price}`}
                       </span>
-                      <span className="mb-1 text-sm text-muted-foreground">
-                        ARS {plans.perMonth}
-                      </span>
+                      <span className="mb-1 text-sm text-muted-foreground">{plans.perMonth}</span>
                     </>
                   ) : (
                     <span className="text-4xl font-bold">{plans.free}</span>
                   )}
                 </div>
-
-                {/* The charge is in pesos and the store cannot be denominated in
-                    anything else, but half the people who might pay for this do
-                    not price in pesos. The reference is a second signal, not a
-                    second offer: both figures come from LEGAL.prices and
-                    PLAN_PRICES_ARS, which tests/pricing.test.ts holds together,
-                    so the two can never quote different plans. */}
-                {plan.price && plan.id !== "free" ? (
-                  <p className="mt-1 text-xs text-muted-foreground/80">
-                    ≈ US${LEGAL.prices[plan.id as "plus" | "pro"]}
-                  </p>
-                ) : null}
 
                 {plan.trial ? (
                   <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
@@ -309,6 +297,7 @@ export function PlansPage() {
       >
         {plans.footer}
       </motion.p>
+      <p className="relative z-10 mt-3 max-w-xl text-center text-xs text-muted-foreground">{billing.taxNote}</p>
       <LegalLinks className="relative z-10 mt-3" />
     </div>
   );

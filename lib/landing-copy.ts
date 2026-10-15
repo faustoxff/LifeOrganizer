@@ -45,13 +45,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark breaks it down", text: "It picks the one that matters now and splits it into steps you can start." },
       { title: "Press start", text: "Focus mode shows one step and a timer. Nothing else." }
     ],
-    priceNote: "Reference prices in US dollars. In Argentina, payment is made in pesos through Lemon Squeezy.",
+    priceNote: "Reference prices in US dollars.",
     faqTitle: "Frequently asked questions",
     faqs: [
       { q: "Is it made for ADHD?", a: "Spark is built around getting started, which is where many people with ADHD get stuck: one task at a time, tiny steps and a visible timer. It is a productivity tool, not a medical treatment or a diagnosis." },
       { q: "Is it free?", a: "Yes. The Free plan costs nothing and needs no card. If you want more, you can try Plus free for 14 days." },
       { q: "Can I cancel anytime?", a: "Yes. You can cancel from your account whenever you like and keep your plan until the end of the paid period." },
-      { q: "How do I pay?", a: "Payments are handled by Lemon Squeezy, our merchant of record: they take the payment, deal with the sales tax and file it, so you never have to. Card details never touch our servers." },
+      { q: "How do I pay?", a: "Payments are handled by Paddle, our merchant of record: they take the payment, deal with the sales tax and file it, so you never have to. Card details never touch our servers." },
       { q: "Is the AI always right?", a: "No. Milo is an aid and can be wrong: verify important things before acting on its answers." },
       { q: "What happens to my data?", a: "Your tasks are yours. We don't sell your data or use it for advertising. More details in the Privacy Policy." }
     ],
@@ -81,13 +81,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la desarma", text: "Elige la que importa ahora y la divide en pasos que sí puedes empezar." },
       { title: "Pulsa iniciar", text: "El modo foco deja un paso y un temporizador. Nada más." }
     ],
-    priceNote: "Precios de referencia en dólares estadounidenses. En Argentina el cobro se realiza en pesos mediante Lemon Squeezy.",
+    priceNote: "Precios de referencia en dólares estadounidenses.",
     faqTitle: "Preguntas frecuentes",
     faqs: [
       { q: "¿Sirve para el TDAH?", a: "Spark está pensado alrededor de empezar, que es donde muchas personas con TDAH se traban: una tarea a la vez, pasos diminutos y un temporizador a la vista. Es una herramienta de productividad, no un tratamiento médico ni un diagnóstico." },
       { q: "¿Es gratis?", a: "Sí. El plan Free no tiene costo ni pide tarjeta. Si quieres más, puedes probar Plus 14 días sin cargo." },
       { q: "¿Puedo cancelar cuando quiera?", a: "Sí. Cancelas desde tu cuenta cuando quieras y conservas el plan hasta el final del período pagado." },
-      { q: "¿Cómo se paga?", a: "Los pagos los procesa Lemon Squeezy, que es el merchant of record: cobra, se ocupa del impuesto y lo presenta, así que vos no tenés nada que hacer. Los datos de tu tarjeta nunca pasan por nuestros servidores." },
+      { q: "¿Cómo se paga?", a: "Los pagos los procesa Paddle, que es el merchant of record: cobra, se ocupa del impuesto y lo presenta, así que vos no tenés nada que hacer. Los datos de tu tarjeta nunca pasan por nuestros servidores." },
       { q: "¿La IA siempre acierta?", a: "No. Milo es una ayuda y puede equivocarse: verifica lo importante antes de actuar según sus respuestas." },
       { q: "¿Qué pasa con mis datos?", a: "Tus tareas son tuyas. No vendemos tus datos ni los usamos para publicidad. Más detalles en la Política de privacidad." }
     ],
@@ -117,13 +117,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "O Spark desmonta", text: "Escolhe a que importa agora e divide em passos que dá para começar." },
       { title: "Aperte iniciar", text: "O modo foco mostra um passo e um cronômetro. Mais nada." }
     ],
-    priceNote: "Preços de referência em dólares americanos. Na Argentina, a cobrança é feita em pesos pelo Lemon Squeezy.",
+    priceNote: "Preços de referência em dólares americanos.",
     faqTitle: "Perguntas frequentes",
     faqs: [
       { q: "Serve para TDAH?", a: "O Spark foi pensado em torno de começar, que é onde muita gente com TDAH trava: uma tarefa por vez, passos mínimos e um cronômetro à vista. É uma ferramenta de produtividade, não um tratamento médico nem um diagnóstico." },
       { q: "É grátis?", a: "Sim. O plano Free não tem custo e não pede cartão. Se quiser mais, você pode testar o Plus por 14 dias sem custo." },
       { q: "Posso cancelar quando quiser?", a: "Sim. Você cancela pela sua conta quando quiser e mantém o plano até o fim do período pago." },
-      { q: "Como pago?", a: "Os pagamentos são processados pelo Lemon Squeezy, nosso merchant of record: ele recebe o pagamento, cuida do imposto sobre vendas e o declara, então você não precisa se preocupar. Os dados do seu cartão nunca passam pelos nossos servidores." },
+      { q: "Como pago?", a: "Os pagamentos são processados pelo Paddle, nosso merchant of record: ele recebe o pagamento, cuida do imposto sobre vendas e o declara, então você não precisa se preocupar. Os dados do seu cartão nunca passam pelos nossos servidores." },
       { q: "A IA sempre acerta?", a: "Não. O Milo é um apoio e pode errar: confira o que for importante antes de agir com base nas respostas." },
       { q: "O que acontece com meus dados?", a: "Suas tarefas são suas. Não vendemos seus dados nem os usamos para publicidade. Mais detalhes na Política de Privacidade." }
     ],
@@ -153,13 +153,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la démonte", text: "Il choisit celle qui compte maintenant et la découpe en étapes réellement faisables." },
       { title: "Appuyez sur démarrer", text: "Le mode focus affiche une étape et un minuteur. Rien d'autre." }
     ],
-    priceNote: "Prix de référence en dollars américains. En Argentine, le paiement se fait en pesos via Lemon Squeezy.",
+    priceNote: "Prix de référence en dollars américains.",
     faqTitle: "Questions fréquentes",
     faqs: [
       { q: "Est-ce fait pour le TDAH ?", a: "Spark est conçu autour du démarrage, là où beaucoup de personnes avec un TDAH bloquent : une tâche à la fois, de toutes petites étapes et un minuteur visible. C'est un outil de productivité, pas un traitement médical ni un diagnostic." },
       { q: "Est-ce gratuit ?", a: "Oui. Le plan Free est gratuit et ne demande pas de carte. Si vous en voulez plus, vous pouvez essayer Plus gratuitement pendant 14 jours." },
       { q: "Puis-je annuler à tout moment ?", a: "Oui. Vous annulez depuis votre compte quand vous voulez et gardez votre plan jusqu'à la fin de la période payée." },
-      { q: "Comment payer ?", a: "Les paiements sont traités par Lemon Squeezy, notre merchant of record : il encaisse le paiement, gère la taxe de vente et la déclare, vous n'avez donc rien à faire. Les données de votre carte ne passent jamais par nos serveurs." },
+      { q: "Comment payer ?", a: "Les paiements sont traités par Paddle, notre merchant of record : il encaisse le paiement, gère la taxe de vente et la déclare, vous n'avez donc rien à faire. Les données de votre carte ne passent jamais par nos serveurs." },
       { q: "L'IA a-t-elle toujours raison ?", a: "Non. Milo est une aide et peut se tromper : vérifiez les informations importantes avant d'agir selon ses réponses." },
       { q: "Que deviennent mes données ?", a: "Vos tâches vous appartiennent. Nous ne vendons pas vos données et ne les utilisons pas pour la publicité. Plus de détails dans la Politique de confidentialité." }
     ],
@@ -189,13 +189,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark zerlegt sie", text: "Es wählt die, die jetzt zählt, und teilt sie in Schritte, die du anfangen kannst." },
       { title: "Drück auf Start", text: "Der Fokusmodus zeigt einen Schritt und einen Timer. Sonst nichts." }
     ],
-    priceNote: "Referenzpreise in US-Dollar. In Argentinien erfolgt die Zahlung in Pesos über Lemon Squeezy.",
+    priceNote: "Referenzpreise in US-Dollar.",
     faqTitle: "Häufige Fragen",
     faqs: [
       { q: "Ist das für ADHS gemacht?", a: "Spark ist rund ums Anfangen gebaut – genau dort bleiben viele Menschen mit ADHS hängen: eine Aufgabe, winzige Schritte und ein sichtbarer Timer. Es ist ein Produktivitätswerkzeug, keine medizinische Behandlung und keine Diagnose." },
       { q: "Ist es kostenlos?", a: "Ja. Der Free-Plan kostet nichts und braucht keine Karte. Wenn du mehr willst, kannst du Plus 14 Tage kostenlos testen." },
       { q: "Kann ich jederzeit kündigen?", a: "Ja. Du kündigst jederzeit in deinem Konto und behältst deinen Plan bis zum Ende des bezahlten Zeitraums." },
-      { q: "Wie bezahle ich?", a: "Zahlungen übernimmt Lemon Squeezy, unser Merchant of Record: Sie nehmen die Zahlung entgegen, erledigen die Umsatzsteuer und melden sie an, du musst also nichts tun. Deine Kartendaten durchlaufen nie unsere Server." },
+      { q: "Wie bezahle ich?", a: "Zahlungen übernimmt Paddle, unser Merchant of Record: Sie nehmen die Zahlung entgegen, erledigen die Umsatzsteuer und melden sie an, du musst also nichts tun. Deine Kartendaten durchlaufen nie unsere Server." },
       { q: "Hat die KI immer recht?", a: "Nein. Milo ist eine Hilfe und kann sich irren: Prüfe Wichtiges, bevor du nach seinen Antworten handelst." },
       { q: "Was passiert mit meinen Daten?", a: "Deine Aufgaben gehören dir. Wir verkaufen deine Daten nicht und nutzen sie nicht für Werbung. Mehr in der Datenschutzerklärung." }
     ],
@@ -225,13 +225,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la smonta", text: "Sceglie quella che conta ora e la divide in passaggi che puoi davvero iniziare." },
       { title: "Premi avvia", text: "La modalità focus mostra un passaggio e un timer. Nient'altro." }
     ],
-    priceNote: "Prezzi di riferimento in dollari statunitensi. In Argentina il pagamento avviene in pesi tramite Lemon Squeezy.",
+    priceNote: "Prezzi di riferimento in dollari statunitensi.",
     faqTitle: "Domande frequenti",
     faqs: [
       { q: "È pensato per l'ADHD?", a: "Spark è costruito intorno all'iniziare, il punto in cui molte persone con ADHD si bloccano: un'attività per volta, passaggi minimi e un timer in vista. È uno strumento di produttività, non un trattamento medico né una diagnosi." },
       { q: "È gratis?", a: "Sì. Il piano Free non ha costi e non richiede carta. Se vuoi di più, puoi provare Plus gratis per 14 giorni." },
       { q: "Posso annullare quando voglio?", a: "Sì. Annulli dal tuo account quando vuoi e mantieni il piano fino alla fine del periodo pagato." },
-      { q: "Come si paga?", a: "I pagamenti sono gestiti da Lemon Squeezy, il nostro merchant of record: incassa il pagamento, si occupa dell'imposta sulle vendite e la dichiara, così non devi fare nulla. I dati della tua carta non passano mai dai nostri server." },
+      { q: "Come si paga?", a: "I pagamenti sono gestiti da Paddle, il nostro merchant of record: incassa il pagamento, si occupa dell'imposta sulle vendite e la dichiara, così non devi fare nulla. I dati della tua carta non passano mai dai nostri server." },
       { q: "L'IA ha sempre ragione?", a: "No. Milo è un aiuto e può sbagliare: verifica le cose importanti prima di agire in base alle sue risposte." },
       { q: "Che succede ai miei dati?", a: "Le tue attività sono tue. Non vendiamo i tuoi dati né li usiamo per la pubblicità. Maggiori dettagli nell'Informativa sulla privacy." }
     ],
@@ -261,13 +261,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark 帮你拆解", text: "它挑出此刻重要的那件事，并拆成你能真正开始的步骤。" },
       { title: "按下开始", text: "专注模式只显示一个步骤和一个计时器，别无其他。" }
     ],
-    priceNote: "参考价格以美元计。在阿根廷，通过 Lemon Squeezy 以比索付款。",
+    priceNote: "参考价格以美元计。",
     faqTitle: "常见问题",
     faqs: [
       { q: "适合 ADHD（多动症）吗？", a: "Spark 围绕「开始」而设计，而这正是许多 ADHD 人群卡住的地方：一次一件事、极小的步骤、看得见的计时器。它是效率工具，不是医疗手段，也不能用于诊断。" },
       { q: "免费吗？", a: "是的。Free 方案免费，无需绑卡。想要更多功能，可以免费试用 Plus 14 天。" },
       { q: "可以随时取消吗？", a: "可以。你可随时在账户中取消，并在已付费周期结束前继续使用当前方案。" },
-      { q: "如何付款？", a: "支付由 Lemon Squeezy 处理，它是我们的收款方：款项由其收取，销售税也由其申报，你无需操心。你的银行卡信息不会经过我们的服务器。" },
+      { q: "如何付款？", a: "支付由 Paddle 处理，它是我们的收款方：款项由其收取，销售税也由其申报，你无需操心。你的银行卡信息不会经过我们的服务器。" },
       { q: "AI 总是正确吗？", a: "不是。Milo 只是辅助工具，可能出错：依据其回答行动前，请核实重要信息。" },
       { q: "我的数据会怎样？", a: "你的任务归你所有。我们不会出售你的数据，也不会用于广告。详情见隐私政策。" }
     ],
@@ -297,13 +297,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Sparkが分解する", text: "今いちばん大事な1件を選び、始められる手順に分けます。" },
       { title: "開始を押す", text: "集中モードは手順1つとタイマーだけを表示します。" }
     ],
-    priceNote: "参考価格は米ドル表示です。アルゼンチンではLemon Squeezy経由でペソでの決済となります。",
+    priceNote: "参考価格は米ドル表示です。",
     faqTitle: "よくある質問",
     faqs: [
       { q: "ADHDの人に向いていますか？", a: "Sparkは「始めること」を中心に作られています。ADHDの多くの人がつまずくのがそこだからです。1件ずつ、ごく小さな手順、見えるタイマー。あくまで生産性ツールで、医療的な治療や診断ではありません。" },
       { q: "無料ですか？", a: "はい。Freeプランは無料で、カードも不要です。さらに使いたい場合は、Plusを14日間無料で試せます。" },
       { q: "いつでも解約できますか？", a: "はい。アカウントからいつでも解約でき、支払い済みの期間の終わりまでプランを利用できます。" },
-      { q: "支払い方法は？", a: "支払いは、当社のmerchant of recordであるLemon Squeezyが処理します。代金の回收も、売上税の計算と申告も、すべてLemon Squeezyが行うためそのようにしてください。カード情報は当社サーバーを経由しません。" },
+      { q: "支払い方法は？", a: "支払いは、当社のmerchant of recordであるPaddleが処理します。代金の回收も、売上税の計算と申告も、すべてPaddleが行うためそのようにしてください。カード情報は当社サーバーを経由しません。" },
       { q: "AIは常に正しいですか？", a: "いいえ。Miloは補助ツールで、間違うこともあります。重要なことは、回答に基づいて行動する前に確認してください。" },
       { q: "データはどうなりますか？", a: "タスクはあなたのものです。データを販売したり、広告に利用したりしません。詳細はプライバシーポリシーをご覧ください。" }
     ],
@@ -333,13 +333,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark가 쪼개요", text: "지금 중요한 하나를 고르고, 시작할 수 있는 단계로 나눠요." },
       { title: "시작을 눌러요", text: "집중 모드는 단계 하나와 타이머만 보여줘요." }
     ],
-    priceNote: "참고 가격은 미국 달러 기준입니다. 아르헨티나에서는 Lemon Squeezy를 통해 페소로 결제됩니다.",
+    priceNote: "참고 가격은 미국 달러 기준입니다.",
     faqTitle: "자주 묻는 질문",
     faqs: [
       { q: "ADHD에 도움이 되나요?", a: "Spark는 '시작하기'를 중심으로 만들었어요. ADHD가 있는 많은 분들이 막히는 지점이니까요. 한 번에 하나, 아주 작은 단계, 눈에 보이는 타이머. 생산성 도구일 뿐 의료적 치료나 진단은 아닙니다." },
       { q: "무료인가요?", a: "네. Free 요금제는 무료이며 카드가 필요 없습니다. 더 필요하시면 Plus를 14일간 무료로 체험할 수 있어요." },
       { q: "언제든 해지할 수 있나요?", a: "네. 계정에서 언제든 해지할 수 있고, 결제한 기간이 끝날 때까지 요금제를 이용할 수 있습니다." },
-      { q: "결제는 어떻게 하나요?", a: "결제는 당사의 merchant of record인 Lemon Squeezy가 처리합니다. 대금 수령, 세금 부과와 신고를 모두 담당하므로 따로 신경 쓰실 것이 없습니다. 카드 정보는 당사 서버를 거치지 않습니다." },
+      { q: "결제는 어떻게 하나요?", a: "결제는 당사의 merchant of record인 Paddle가 처리합니다. 대금 수령, 세금 부과와 신고를 모두 담당하므로 따로 신경 쓰실 것이 없습니다. 카드 정보는 당사 서버를 거치지 않습니다." },
       { q: "AI가 항상 맞나요?", a: "아니요. Milo는 보조 도구이며 틀릴 수 있습니다. 중요한 내용은 답변에 따라 행동하기 전에 확인하세요." },
       { q: "내 데이터는 어떻게 되나요?", a: "할 일은 여러분의 것입니다. 데이터를 판매하거나 광고에 사용하지 않습니다. 자세한 내용은 개인정보 처리방침을 확인하세요." }
     ],
@@ -369,13 +369,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark её разбирает", text: "Выбирает ту, что важна сейчас, и делит на шаги, которые реально начать." },
       { title: "Нажмите старт", text: "Режим фокуса показывает один шаг и таймер. Больше ничего." }
     ],
-    priceNote: "Ориентировочные цены указаны в долларах США. В Аргентине оплата производится в песо через Lemon Squeezy.",
+    priceNote: "Ориентировочные цены указаны в долларах США.",
     faqTitle: "Частые вопросы",
     faqs: [
       { q: "Подходит ли это при СДВГ?", a: "Spark построен вокруг начала — именно здесь застревают многие люди с СДВГ: одна задача за раз, крошечные шаги и таймер на виду. Это инструмент продуктивности, а не лечение и не диагностика." },
       { q: "Это бесплатно?", a: "Да. Тариф Free бесплатный и не требует карты. Если хотите больше, можно бесплатно попробовать Plus в течение 14 дней." },
       { q: "Можно отменить в любой момент?", a: "Да. Вы отменяете подписку в аккаунте когда угодно и сохраняете тариф до конца оплаченного периода." },
-      { q: "Как оплатить?", a: "Платежи обрабатывает Lemon Squeezy, наш продавец от имени компании: он принимает оплату, берёт на себя налог с продаж и подаёт декларацию, так что вам ничего делать не нужно. Данные вашей карты не проходят через наши серверы." },
+      { q: "Как оплатить?", a: "Платежи обрабатывает Paddle, наш продавец от имени компании: он принимает оплату, берёт на себя налог с продаж и подаёт декларацию, так что вам ничего делать не нужно. Данные вашей карты не проходят через наши серверы." },
       { q: "ИИ всегда прав?", a: "Нет. Milo — это помощник, и он может ошибаться: проверяйте важное, прежде чем действовать по его ответам." },
       { q: "Что будет с моими данными?", a: "Ваши задачи принадлежат вам. Мы не продаём ваши данные и не используем их для рекламы. Подробнее — в Политике конфиденциальности." }
     ],
@@ -405,13 +405,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark onu parçalara ayırır", text: "Şu an önemli olanı seçer ve gerçekten başlayabileceğin adımlara böler." },
       { title: "Başlat'a bas", text: "Odak modu tek bir adım ve zamanlayıcı gösterir. Başka hiçbir şey." }
     ],
-    priceNote: "Referans fiyatlar ABD doları cinsindendir. Arjantin'de ödeme, Lemon Squeezy üzerinden peso ile yapılır.",
+    priceNote: "Referans fiyatlar ABD doları cinsindendir.",
     faqTitle: "Sık sorulan sorular",
     faqs: [
       { q: "DEHB için uygun mu?", a: "Spark, başlamak üzerine kurulu: DEHB'li birçok kişinin takıldığı yer tam da orası. Tek seferde tek görev, minik adımlar ve görünür bir zamanlayıcı. Bu bir verimlilik aracıdır; tıbbi tedavi ya da teşhis değildir." },
       { q: "Ücretsiz mi?", a: "Evet. Free planı ücretsizdir ve kart istemez. Daha fazlasını isterseniz Plus'ı 14 gün ücretsiz deneyebilirsiniz." },
       { q: "İstediğim zaman iptal edebilir miyim?", a: "Evet. Hesabınızdan istediğiniz zaman iptal edebilir ve ödenen dönemin sonuna kadar planınızı kullanabilirsiniz." },
-      { q: "Nasıl ödeme yaparım?", a: "Ödemeler, merchant of record olan Lemon Squeezy tarafından işlenir: tahsilatı alır, satış vergisini yönetir ve beyanını yapar, böylece sizin bunlarla uğraşmanız gerekmez. Kart bilgileriniz sunucularımıza hiç uğramaz." },
+      { q: "Nasıl ödeme yaparım?", a: "Ödemeler, merchant of record olan Paddle tarafından işlenir: tahsilatı alır, satış vergisini yönetir ve beyanını yapar, böylece sizin bunlarla uğraşmanız gerekmez. Kart bilgileriniz sunucularımıza hiç uğramaz." },
       { q: "Yapay zekâ her zaman doğru mudur?", a: "Hayır. Milo bir yardımcıdır ve yanılabilir: yanıtlarına göre hareket etmeden önce önemli bilgileri doğrulayın." },
       { q: "Verilerime ne olur?", a: "Görevleriniz size aittir. Verilerinizi satmayız ve reklam için kullanmayız. Ayrıntılar Gizlilik Politikası'nda." }
     ],
@@ -441,13 +441,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark haalt hem uit elkaar", text: "Het kiest wat nu telt en hakt het in stappen waar je aan kunt beginnen." },
       { title: "Druk op start", text: "De focusmodus toont één stap en een timer. Verder niets." }
     ],
-    priceNote: "Referentieprijzen in Amerikaanse dollars. In Argentinië wordt in pesos betaald via Lemon Squeezy.",
+    priceNote: "Referentieprijzen in Amerikaanse dollars.",
     faqTitle: "Veelgestelde vragen",
     faqs: [
       { q: "Is het gemaakt voor ADHD?", a: "Spark is gebouwd rond beginnen, precies waar veel mensen met ADHD vastlopen: één taak tegelijk, minuscule stappen en een zichtbare timer. Het is een productiviteitstool, geen medische behandeling of diagnose." },
       { q: "Is het gratis?", a: "Ja. Het Free-abonnement kost niets en vraagt geen kaart. Wil je meer, dan kun je Plus 14 dagen gratis proberen." },
       { q: "Kan ik altijd opzeggen?", a: "Ja. Je zegt op in je account wanneer je wilt en houdt je abonnement tot het einde van de betaalde periode." },
-      { q: "Hoe betaal ik?", a: "Betalingen worden afgehandeld door Lemon Squeezy, onze merchant of record: zij ontvangen het bedrag, verzorgen de btw en geven die aangifte, zodat jij je daar niet mee hoeft te bemoeien. Je gegevens van je kaart komen nooit op onze servers." },
+      { q: "Hoe betaal ik?", a: "Betalingen worden afgehandeld door Paddle, onze merchant of record: zij ontvangen het bedrag, verzorgen de btw en geven die aangifte, zodat jij je daar niet mee hoeft te bemoeien. Je gegevens van je kaart komen nooit op onze servers." },
       { q: "Heeft de AI altijd gelijk?", a: "Nee. Milo is een hulpmiddel en kan zich vergissen: controleer belangrijke dingen voordat je op de antwoorden handelt." },
       { q: "Wat gebeurt er met mijn gegevens?", a: "Je taken zijn van jou. We verkopen je gegevens niet en gebruiken ze niet voor reclame. Meer details in het Privacybeleid." }
     ],
@@ -477,13 +477,13 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark je rozkłada", text: "Wybiera to, co ważne teraz, i dzieli na kroki, które da się zacząć." },
       { title: "Naciśnij start", text: "Tryb skupienia pokazuje jeden krok i minutnik. Nic więcej." }
     ],
-    priceNote: "Ceny orientacyjne w dolarach amerykańskich. W Argentynie płatność odbywa się w pesos przez Lemon Squeezy.",
+    priceNote: "Ceny orientacyjne w dolarach amerykańskich.",
     faqTitle: "Najczęstsze pytania",
     faqs: [
       { q: "Czy nadaje się przy ADHD?", a: "Spark jest zbudowany wokół zaczynania — właśnie tam grzęźnie wiele osób z ADHD: jedno zadanie naraz, malutkie kroki i widoczny minutnik. To narzędzie do produktywności, nie leczenie ani diagnoza." },
       { q: "Czy to jest darmowe?", a: "Tak. Plan Free jest bezpłatny i nie wymaga karty. Jeśli chcesz więcej, możesz przetestować Plus przez 14 dni za darmo." },
       { q: "Czy mogę anulować w dowolnym momencie?", a: "Tak. Anulujesz w swoim koncie, kiedy chcesz, i zachowujesz plan do końca opłaconego okresu." },
-      { q: "Jak zapłacić?", a: "Płatności obsługuje Lemon Squeezy, nasz merchant of record: pobiera pieniądze, zajmuje się podatkiem od sprzedaży i rozlicza go, więc nie musisz się tym martwić. Dane Twojej karty nigdy nie trafiają na nasze serwery." },
+      { q: "Jak zapłacić?", a: "Płatności obsługuje Paddle, nasz merchant of record: pobiera pieniądze, zajmuje się podatkiem od sprzedaży i rozlicza go, więc nie musisz się tym martwić. Dane Twojej karty nigdy nie trafiają na nasze serwery." },
       { q: "Czy AI zawsze ma rację?", a: "Nie. Milo jest pomocą i może się mylić: sprawdzaj ważne rzeczy, zanim zadziałasz na podstawie jego odpowiedzi." },
       { q: "Co dzieje się z moimi danymi?", a: "Twoje zadania należą do Ciebie. Nie sprzedajemy Twoich danych ani nie używamy ich do reklam. Więcej w Polityce prywatności." }
     ],
