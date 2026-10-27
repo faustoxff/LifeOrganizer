@@ -19,18 +19,19 @@ variables de `.env.example` (`.env.local` es gitignored, no se sube solo).
 
 Al deploying tenés una URL pública HTTPS. **Ese es el objetivo de este paso.**
 
-## Paso 2 — Lemon Squeezy: webhook
+## Paso 2 — Paddle: webhook
 
 Recién ahora, porque necesita la URL del paso 1.
 
-1. app.lemonsqueezy.com → **Settings → Webhooks → New endpoint**
-2. Callback URL: `https://<tu-dominio>/api/subscriptions/webhook`
-3. Eventos: `subscription_created`, `subscription_updated`,
-   `subscription_cancelled`, `subscription_payment_failed`
-4. Te devuelve un **signing secret** → `LEMONSQUEEZY_WEBHOOK_SECRET`
+1. Paddle → **Developer tools → Notifications → New destination**
+2. URL: `https://<tu-dominio>/api/subscriptions/webhook`
+3. Eventos: `subscription.created`, `subscription.updated`,
+   `subscription.canceled`
+4. Te devuelve un **secret key** → `PADDLE_NOTIFICATION_WEBHOOK_SECRET`
 
-El checkout se arma con una URL alojada que ya incluye el `variant_id`, así que
-no hay preapproval ni llamada de creación de por medio. Actualizá la variable en
+El checkout es el overlay de Paddle.js, abierto con el price id del plan
+(`NEXT_PUBLIC_PADDLE_PRICE_PLUS` / `NEXT_PUBLIC_PADDLE_PRICE_PRO`), así que no
+hay preapproval ni llamada de creación de por medio. Actualizá la variable en
 Vercel y rebuildea. Sin el signing secret, la ruta devuelve 503 en producción:
 se cobra la plata y el plan nunca se activa.
 

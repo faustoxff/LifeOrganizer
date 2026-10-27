@@ -80,7 +80,7 @@ export async function startPlusTrial(userId: string, trialDays: number): Promise
 
 /**
  * Finds the account behind a subscription id the webhook did not carry a
- * user_id for. Lemon Squeezy normally echoes `checkout[custom][user_id]`, so
+ * user_id for. Paddle normally echoes the checkout's `customData.user_id`, so
  * this is the fallback for renewals and for any event that arrives without the
  * custom field — Mercado Pago, where the id was the only handle, worked this
  * way and the column it used is still what stores it.
@@ -97,7 +97,7 @@ export async function findUserIdByPreapprovalId(mpPreapprovalId: string): Promis
  * on user_id so retries and out-of-order events converge on the same state.
  *
  * `mpPreapprovalId` / `mp_preapproval_id` hold whichever provider issued the
- * subscription — Mercado Pago's preapproval id or Lemon Squeezy's subscription
+ * subscription — Mercado Pago's preapproval id or Paddle's subscription
  * id. The column keeps its original name so no migration stands between an
  * already-written row and a working lookup; `resolveTrialView` and
  * `findUserIdByPreapprovalId` only ever treat it as "there is a real
@@ -121,7 +121,7 @@ export async function syncSubscription(params: {
     ON CONFLICT (user_id) DO UPDATE SET
       plan = ${plan},
       mp_preapproval_id = ${params.mpPreapprovalId},
-      -- Lemon Squeezy's payload carries a customer id, not an email, so the
+      -- Paddle's payload carries a customer id, not an email, so the
       -- webhook passes an empty string. Without this guard every renewal would
       -- erase the address a Mercado Pago subscriber still has on file.
       mp_payer_email = CASE

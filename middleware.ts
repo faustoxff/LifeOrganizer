@@ -9,7 +9,7 @@ export default clerkMiddleware();
 export const config = {
   // The payment webhook is deliberately not in either pattern.
   //
-  // Lemon Squeezy signs the exact bytes of the request body. Clerk's
+  // Paddle signs the exact bytes of the request body. Clerk's
   // middleware, applied to a request it does not recognise as coming from a
   // signed-in browser, re-reads the body on its way through — and the body that
   // reaches the route is no longer byte-for-byte what the provider signed. The

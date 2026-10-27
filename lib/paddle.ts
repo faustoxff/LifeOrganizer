@@ -10,9 +10,8 @@ import type { PaidPlanName, SubscriptionStatus } from "@/lib/subscription-plans"
 
 // Paddle is the merchant of record: it is the legal seller, it charges the
 // buyer, it collects and remits the sales tax for every country except the
-// merchant's own, and it hands over the rest. That is the same contract
-// Lemon Squeezy offered, and the reason the tax burden here is Argentina's
-// alone and not a dozen other jurisdictions'.
+// merchant's own, and it hands over the rest. That is the reason the tax burden
+// here is Argentina's alone and not a dozen other jurisdictions'.
 
 export type { PaidPlanName as PaidPlan };
 

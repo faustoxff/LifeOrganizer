@@ -24,7 +24,7 @@ for (const field of ["operatorTaxId", "operatorAddress", "contactEmail"]) {
   const value = LEGAL[field];
   // Matches "[DOMICILIO], Argentina" as well as a bare "[CUIT]".
   if (!value || /\[[^\]]+\]/.test(value)) {
-    blockers.push(`lib/legal-config.ts: ${field} is still "${value}" — it renders on /terms and /privacy`);
+    blockers.push(`lib/legal-config.ts: ${field} is still "${value}" — it renders on /terms, /privacy and /refunds`);
   }
 }
 

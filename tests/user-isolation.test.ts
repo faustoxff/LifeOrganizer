@@ -97,7 +97,7 @@ describe("API routes", () => {
       const source = read(route);
       // The webhook has no session to check — its identity guarantee is the
       // provider's HMAC over the raw body. Mercado Pago used its own SDK
-      // validator; Lemon Squeezy uses the one in lib/lemonsqueezy.ts. Either
+      // validator; Paddle uses its SDK's webhooks.unmarshal. Either
       // way the route must contain a signature check, never neither.
       // The project routes authenticate through lib/project-route.ts, checked below.
       const guarded =

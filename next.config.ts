@@ -37,10 +37,9 @@ const csp = [
   `style-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  // The AI features call Groq/Tavily and Lemon Squeezy from the server only, so
-  // the browser never needs them; Clerk does. The Lemon Squeezy checkout is a
-  // top-level redirect rather than an embedded frame, which is why no LS origin
-  // appears anywhere in this policy: nothing of theirs is loaded into the page.
+  // The AI features call Groq/Tavily from the server only, so the browser never
+  // needs them; Clerk does. Paddle's checkout is an overlay loaded into the page
+  // (Paddle.js plus its iframe), which is why its origins are allowed here.
   `connect-src 'self' ${clerkHttp} ${clerkWs} ${turnstile} ${paddle}`,
   `frame-src 'self' ${clerkHttp} ${turnstile} ${paddle}`,
   "frame-ancestors 'self'",

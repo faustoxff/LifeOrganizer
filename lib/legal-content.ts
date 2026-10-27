@@ -32,8 +32,8 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Planes, precios y pagos",
         body: [
-          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios de referencia son USD ${LEGAL.prices.plus} (Plus) y USD ${LEGAL.prices.pro} (Pro) por mes. En Argentina los cobros pueden realizarse en pesos argentinos a través de Lemon Squeezy, según el valor informado al momento de suscribirte.`,
-          "Los pagos son procesados por Lemon Squeezy, que actúa como merchant of record: cobra, liquida y presenta el impuesto correspondiente, por lo que el Responsable no almacena los datos de tu tarjeta.",
+          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios de referencia son USD ${LEGAL.prices.plus} (Plus) y USD ${LEGAL.prices.pro} (Pro) por mes. El importe final, con los impuestos que correspondan, se muestra en el checkout de Paddle antes de pagar.`,
+          "Los pagos son procesados por Paddle, que actúa como merchant of record: cobra, liquida y presenta el impuesto correspondiente, por lo que el Responsable no almacena los datos de tu tarjeta.",
           `El plan Plus puede incluir un período de prueba gratuito de ${LEGAL.trialDays} días, por única vez por persona. Los planes y precios pueden modificarse; los cambios se comunican con anticipación y no afectan el período ya abonado.`,
           "Los límites de uso diario de las funciones de IA dependen del plan y pueden ajustarse."
         ]
@@ -43,7 +43,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
         body: [
           "La suscripción se renueva automáticamente cada mes hasta que la canceles. Puedes cancelarla en cualquier momento desde tu cuenta o escribiendo a " + MAIL + "; seguirás con acceso al plan hasta el final del período ya pagado, sin cargos posteriores.",
           "Si contrataste a distancia desde Argentina, tienes derecho a revocar la contratación dentro de los 10 días corridos desde que la contrataste (art. 34 de la Ley 24.240 de Defensa del Consumidor), pidiéndolo a " + MAIL + ". En ese caso se reembolsa el importe pagado.",
-          "Fuera de ese plazo, y salvo que la ley disponga otra cosa, los períodos ya iniciados no se reembolsan."
+          "Además, todos los planes pagos tienen una garantía de devolución de 14 días. Las condiciones están en la Política de reembolsos (/refunds)."
         ]
       },
       {
@@ -106,8 +106,8 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Plans, prices and payments",
         body: [
-          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Reference prices are USD ${LEGAL.prices.plus} (Plus) and USD ${LEGAL.prices.pro} (Pro) per month. In Argentina, charges may be made in Argentine pesos through Lemon Squeezy at the amount shown when you subscribe.`,
-          "Payments are processed by Lemon Squeezy, which acts as merchant of record: it collects the payment, settles and files the applicable tax, so the Operator does not store your card details.",
+          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Reference prices are USD ${LEGAL.prices.plus} (Plus) and USD ${LEGAL.prices.pro} (Pro) per month. The final amount, including any applicable tax, is shown in the Paddle checkout before you pay.`,
+          "Payments are processed by Paddle, which acts as merchant of record: it collects the payment, settles and files the applicable tax, so the Operator does not store your card details.",
           `The Plus plan may include a free ${LEGAL.trialDays}-day trial, once per person. Plans and prices may change; changes are announced in advance and do not affect an already-paid period.`,
           "Daily usage limits for AI features depend on your plan and may be adjusted."
         ]
@@ -117,7 +117,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
         body: [
           "Subscriptions renew automatically every month until you cancel. You can cancel at any time from your account or by writing to " + MAIL + "; you keep access until the end of the period you already paid for, with no further charges.",
           "If you purchased remotely from Argentina, you may withdraw within 10 calendar days of purchase (Argentine Consumer Protection Law 24.240, art. 34) by writing to " + MAIL + ", and the amount paid will be refunded.",
-          "Outside that window, and unless the law provides otherwise, periods already started are not refunded."
+          "In addition, every paid plan comes with a 14-day money-back guarantee. The details are in the Refund Policy (/refunds)."
         ]
       },
       {
@@ -177,7 +177,7 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Con quién los compartimos",
         body: [
-          "Usamos proveedores que tratan datos por nuestra cuenta: Clerk (autenticación), Neon (base de datos), Vercel (alojamiento), Groq (modelos de IA que procesan tus mensajes y tareas), Tavily (búsqueda web cuando Milo la usa; se envían los términos de la consulta), Lemon Squeezy (procesamiento de pagos).",
+          "Usamos proveedores que tratan datos por nuestra cuenta: Clerk (autenticación), Neon (base de datos), Vercel (alojamiento), Groq (modelos de IA que procesan tus mensajes y tareas), Tavily (búsqueda web cuando Milo la usa; se envían los términos de la consulta), Paddle (procesamiento de pagos, como merchant of record).",
           "Estos proveedores pueden estar ubicados fuera de Argentina, incluidos Estados Unidos, por lo que tus datos pueden transferirse internacionalmente. Solo los compartimos en la medida necesaria para prestar el Servicio."
         ]
       },
@@ -244,7 +244,7 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Who we share it with",
         body: [
-          "We use providers that process data on our behalf: Clerk (authentication), Neon (database), Vercel (hosting), Groq (AI models that process your messages and tasks), Tavily (web search when Milo uses it; the query terms are sent), Lemon Squeezy (payment processing).",
+          "We use providers that process data on our behalf: Clerk (authentication), Neon (database), Vercel (hosting), Groq (AI models that process your messages and tasks), Tavily (web search when Milo uses it; the query terms are sent), Paddle (payment processing, as merchant of record).",
           "These providers may be located outside Argentina, including the United States, so your data may be transferred internationally. We share it only as needed to provide the Service."
         ]
       },
@@ -285,6 +285,93 @@ export const privacyContent: { es: LegalContent; en: LegalContent } = {
         title: "Minors and changes",
         body: [
           "The Service is not directed at people under 18. We may update this policy; we will publish the new version with its date and notify you of important changes."
+        ]
+      }
+    ]
+  }
+};
+
+export const refundsContent: { es: LegalContent; en: LegalContent } = {
+  es: {
+    title: "Política de reembolsos",
+    intro: `Esta política explica cuándo y cómo puedes pedir la devolución de un pago de ${S}. Los pagos los procesa Paddle, que actúa como merchant of record (vendedor registrado) de las suscripciones.`,
+    sections: [
+      {
+        title: "Garantía de devolución de 14 días",
+        body: [
+          "Todos los planes pagos (Plus y Pro) tienen una garantía de devolución de 14 días. El plazo se cuenta desde la fecha del primer pago o de cualquier renovación: si no estás conforme, puedes pedir el reembolso de ese pago dentro de los 14 días siguientes."
+        ]
+      },
+      {
+        title: "Cómo pedir un reembolso",
+        body: [
+          `Escríbenos a ${MAIL} con el email de tu cuenta, o pídelo directamente a Paddle, nuestro merchant of record, en paddle.net, donde puedes buscar tu compra y solicitar la devolución.`
+        ]
+      },
+      {
+        title: "Cómo se procesa",
+        body: [
+          "Los reembolsos los procesa Paddle y se acreditan en el mismo medio de pago que usaste. Según tu banco o emisor de la tarjeta, el importe puede tardar varios días hábiles en aparecer."
+        ]
+      },
+      {
+        title: "Cancelación",
+        body: [
+          "Puedes cancelar tu suscripción en cualquier momento desde la página de tu cuenta. El plan sigue activo hasta el final del período ya pagado y no se realizan cobros posteriores."
+        ]
+      },
+      {
+        title: "Prueba gratuita",
+        body: [
+          `La prueba gratuita de ${LEGAL.trialDays} días del plan Plus no tiene ningún cargo, así que durante la prueba no hay nada que reembolsar.`
+        ]
+      },
+      {
+        title: "Tus derechos como consumidor",
+        body: [
+          "Esta política no limita los derechos que la ley te reconoce, incluido el derecho de revocación previsto en la Ley 24.240 de Defensa del Consumidor (ver los Términos y condiciones)."
+        ]
+      }
+    ]
+  },
+  en: {
+    title: "Refund Policy",
+    intro: `This policy explains when and how you can get a payment for ${S} refunded. Payments are processed by Paddle, which acts as the merchant of record for subscriptions.`,
+    sections: [
+      {
+        title: "14-day money-back guarantee",
+        body: [
+          "Every paid plan (Plus and Pro) comes with a 14-day money-back guarantee, counted from the date of the first payment or of any renewal: if you are not satisfied, you can request a refund of that payment within the following 14 days."
+        ]
+      },
+      {
+        title: "How to request a refund",
+        body: [
+          `Write to us at ${MAIL} with the email on your account, or ask Paddle, our merchant of record, directly at paddle.net, where you can look up your purchase and request a refund.`
+        ]
+      },
+      {
+        title: "How refunds are processed",
+        body: [
+          "Refunds are processed by Paddle to the original payment method. Depending on your bank or card issuer, it may take several business days for the refund to appear."
+        ]
+      },
+      {
+        title: "Cancellation",
+        body: [
+          "You can cancel your subscription at any time from your account page. Your plan stays active until the end of the period you already paid for, with no further charges."
+        ]
+      },
+      {
+        title: "Free trial",
+        body: [
+          `The ${LEGAL.trialDays}-day free trial of the Plus plan has no charge, so there is nothing to refund during the trial.`
+        ]
+      },
+      {
+        title: "Your consumer rights",
+        body: [
+          "This policy does not limit the rights you have under applicable law, including the right of withdrawal under Argentine Consumer Protection Law 24.240 (see the Terms of Service)."
         ]
       }
     ]

@@ -1,4 +1,4 @@
-// Datos del responsable del servicio. Se renderizan en /terms y /privacy:
+// Datos del responsable del servicio. Se renderizan en /terms, /privacy y /refunds:
 // un placeholder acá es un bloqueo para publicar, y `npm run check:release`
 // falla si queda alguno.
 export const LEGAL = {
@@ -9,7 +9,7 @@ export const LEGAL = {
   operatorTaxId: "20-46690907-7",
   operatorAddress: "San Lorenzo 2523, B7600 Mar del Plata, Buenos Aires, Argentina",
   contactEmail: "faustozaccanti@gmail.com",
-  lastUpdated: "2026-09-28",
+  lastUpdated: "2026-10-27",
   // Precios de referencia (USD). Los cobros en pesos se calculan aparte.
   prices: { plus: 6, pro: 20 },
   trialDays: 14
