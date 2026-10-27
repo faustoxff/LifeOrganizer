@@ -45,7 +45,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark breaks it down", text: "It picks the one that matters now and splits it into steps you can start." },
       { title: "Press start", text: "Focus mode shows one step and a timer. Nothing else." }
     ],
-    priceNote: "Reference prices in US dollars.",
+    priceNote: "Prices in US dollars. Depending on your country, the final amount may include local taxes.",
     faqTitle: "Frequently asked questions",
     faqs: [
       { q: "Is it made for ADHD?", a: "Spark is built around getting started, which is where many people with ADHD get stuck: one task at a time, tiny steps and a visible timer. It is a productivity tool, not a medical treatment or a diagnosis." },
@@ -81,7 +81,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la desarma", text: "Elige la que importa ahora y la divide en pasos que sí puedes empezar." },
       { title: "Pulsa iniciar", text: "El modo foco deja un paso y un temporizador. Nada más." }
     ],
-    priceNote: "Precios de referencia en dólares estadounidenses.",
+    priceNote: "Se cobra en dólares estadounidenses. Según tu país, el importe final puede incluir impuestos locales.",
     faqTitle: "Preguntas frecuentes",
     faqs: [
       { q: "¿Sirve para el TDAH?", a: "Spark está pensado alrededor de empezar, que es donde muchas personas con TDAH se traban: una tarea a la vez, pasos diminutos y un temporizador a la vista. Es una herramienta de productividad, no un tratamiento médico ni un diagnóstico." },
@@ -117,7 +117,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "O Spark desmonta", text: "Escolhe a que importa agora e divide em passos que dá para começar." },
       { title: "Aperte iniciar", text: "O modo foco mostra um passo e um cronômetro. Mais nada." }
     ],
-    priceNote: "Preços de referência em dólares americanos.",
+    priceNote: "Cobrança em dólares americanos. Dependendo do seu país, o valor final pode incluir impostos locais.",
     faqTitle: "Perguntas frequentes",
     faqs: [
       { q: "Serve para TDAH?", a: "O Spark foi pensado em torno de começar, que é onde muita gente com TDAH trava: uma tarefa por vez, passos mínimos e um cronômetro à vista. É uma ferramenta de produtividade, não um tratamento médico nem um diagnóstico." },
@@ -153,7 +153,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la démonte", text: "Il choisit celle qui compte maintenant et la découpe en étapes réellement faisables." },
       { title: "Appuyez sur démarrer", text: "Le mode focus affiche une étape et un minuteur. Rien d'autre." }
     ],
-    priceNote: "Prix de référence en dollars américains.",
+    priceNote: "Paiement en dollars américains. Selon votre pays, le montant final peut inclure des taxes locales.",
     faqTitle: "Questions fréquentes",
     faqs: [
       { q: "Est-ce fait pour le TDAH ?", a: "Spark est conçu autour du démarrage, là où beaucoup de personnes avec un TDAH bloquent : une tâche à la fois, de toutes petites étapes et un minuteur visible. C'est un outil de productivité, pas un traitement médical ni un diagnostic." },
@@ -189,7 +189,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark zerlegt sie", text: "Es wählt die, die jetzt zählt, und teilt sie in Schritte, die du anfangen kannst." },
       { title: "Drück auf Start", text: "Der Fokusmodus zeigt einen Schritt und einen Timer. Sonst nichts." }
     ],
-    priceNote: "Referenzpreise in US-Dollar.",
+    priceNote: "Abrechnung in US-Dollar. Je nach Land kann der Endbetrag lokale Steuern enthalten.",
     faqTitle: "Häufige Fragen",
     faqs: [
       { q: "Ist das für ADHS gemacht?", a: "Spark ist rund ums Anfangen gebaut – genau dort bleiben viele Menschen mit ADHS hängen: eine Aufgabe, winzige Schritte und ein sichtbarer Timer. Es ist ein Produktivitätswerkzeug, keine medizinische Behandlung und keine Diagnose." },
@@ -225,7 +225,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark la smonta", text: "Sceglie quella che conta ora e la divide in passaggi che puoi davvero iniziare." },
       { title: "Premi avvia", text: "La modalità focus mostra un passaggio e un timer. Nient'altro." }
     ],
-    priceNote: "Prezzi di riferimento in dollari statunitensi.",
+    priceNote: "Addebito in dollari statunitensi. A seconda del paese, l'importo finale può includere imposte locali.",
     faqTitle: "Domande frequenti",
     faqs: [
       { q: "È pensato per l'ADHD?", a: "Spark è costruito intorno all'iniziare, il punto in cui molte persone con ADHD si bloccano: un'attività per volta, passaggi minimi e un timer in vista. È uno strumento di produttività, non un trattamento medico né una diagnosi." },
@@ -261,7 +261,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark 帮你拆解", text: "它挑出此刻重要的那件事，并拆成你能真正开始的步骤。" },
       { title: "按下开始", text: "专注模式只显示一个步骤和一个计时器，别无其他。" }
     ],
-    priceNote: "参考价格以美元计。",
+    priceNote: "以美元收费。根据你所在的国家，最终金额可能包含当地税费。",
     faqTitle: "常见问题",
     faqs: [
       { q: "适合 ADHD（多动症）吗？", a: "Spark 围绕「开始」而设计，而这正是许多 ADHD 人群卡住的地方：一次一件事、极小的步骤、看得见的计时器。它是效率工具，不是医疗手段，也不能用于诊断。" },
@@ -297,7 +297,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Sparkが分解する", text: "今いちばん大事な1件を選び、始められる手順に分けます。" },
       { title: "開始を押す", text: "集中モードは手順1つとタイマーだけを表示します。" }
     ],
-    priceNote: "参考価格は米ドル表示です。",
+    priceNote: "米ドルで請求されます。国によっては、最終的な金額に現地の税金が含まれる場合があります。",
     faqTitle: "よくある質問",
     faqs: [
       { q: "ADHDの人に向いていますか？", a: "Sparkは「始めること」を中心に作られています。ADHDの多くの人がつまずくのがそこだからです。1件ずつ、ごく小さな手順、見えるタイマー。あくまで生産性ツールで、医療的な治療や診断ではありません。" },
@@ -333,7 +333,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark가 쪼개요", text: "지금 중요한 하나를 고르고, 시작할 수 있는 단계로 나눠요." },
       { title: "시작을 눌러요", text: "집중 모드는 단계 하나와 타이머만 보여줘요." }
     ],
-    priceNote: "참고 가격은 미국 달러 기준입니다.",
+    priceNote: "미국 달러로 결제됩니다. 국가에 따라 최종 금액에 현지 세금이 포함될 수 있습니다.",
     faqTitle: "자주 묻는 질문",
     faqs: [
       { q: "ADHD에 도움이 되나요?", a: "Spark는 '시작하기'를 중심으로 만들었어요. ADHD가 있는 많은 분들이 막히는 지점이니까요. 한 번에 하나, 아주 작은 단계, 눈에 보이는 타이머. 생산성 도구일 뿐 의료적 치료나 진단은 아닙니다." },
@@ -369,7 +369,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark её разбирает", text: "Выбирает ту, что важна сейчас, и делит на шаги, которые реально начать." },
       { title: "Нажмите старт", text: "Режим фокуса показывает один шаг и таймер. Больше ничего." }
     ],
-    priceNote: "Ориентировочные цены указаны в долларах США.",
+    priceNote: "Оплата в долларах США. В зависимости от страны итоговая сумма может включать местные налоги.",
     faqTitle: "Частые вопросы",
     faqs: [
       { q: "Подходит ли это при СДВГ?", a: "Spark построен вокруг начала — именно здесь застревают многие люди с СДВГ: одна задача за раз, крошечные шаги и таймер на виду. Это инструмент продуктивности, а не лечение и не диагностика." },
@@ -405,7 +405,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark onu parçalara ayırır", text: "Şu an önemli olanı seçer ve gerçekten başlayabileceğin adımlara böler." },
       { title: "Başlat'a bas", text: "Odak modu tek bir adım ve zamanlayıcı gösterir. Başka hiçbir şey." }
     ],
-    priceNote: "Referans fiyatlar ABD doları cinsindendir.",
+    priceNote: "Ödeme ABD doları ile alınır. Ülkenize bağlı olarak son tutara yerel vergiler eklenebilir.",
     faqTitle: "Sık sorulan sorular",
     faqs: [
       { q: "DEHB için uygun mu?", a: "Spark, başlamak üzerine kurulu: DEHB'li birçok kişinin takıldığı yer tam da orası. Tek seferde tek görev, minik adımlar ve görünür bir zamanlayıcı. Bu bir verimlilik aracıdır; tıbbi tedavi ya da teşhis değildir." },
@@ -441,7 +441,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark haalt hem uit elkaar", text: "Het kiest wat nu telt en hakt het in stappen waar je aan kunt beginnen." },
       { title: "Druk op start", text: "De focusmodus toont één stap en een timer. Verder niets." }
     ],
-    priceNote: "Referentieprijzen in Amerikaanse dollars.",
+    priceNote: "Betaling in Amerikaanse dollars. Afhankelijk van je land kan het eindbedrag lokale belastingen bevatten.",
     faqTitle: "Veelgestelde vragen",
     faqs: [
       { q: "Is het gemaakt voor ADHD?", a: "Spark is gebouwd rond beginnen, precies waar veel mensen met ADHD vastlopen: één taak tegelijk, minuscule stappen en een zichtbare timer. Het is een productiviteitstool, geen medische behandeling of diagnose." },
@@ -477,7 +477,7 @@ export const landingCopy: Record<AppLanguage, LandingCopy> = {
       { title: "Spark je rozkłada", text: "Wybiera to, co ważne teraz, i dzieli na kroki, które da się zacząć." },
       { title: "Naciśnij start", text: "Tryb skupienia pokazuje jeden krok i minutnik. Nic więcej." }
     ],
-    priceNote: "Ceny orientacyjne w dolarach amerykańskich.",
+    priceNote: "Płatność w dolarach amerykańskich. W zależności od kraju kwota końcowa może zawierać lokalne podatki.",
     faqTitle: "Najczęstsze pytania",
     faqs: [
       { q: "Czy nadaje się przy ADHD?", a: "Spark jest zbudowany wokół zaczynania — właśnie tam grzęźnie wiele osób z ADHD: jedno zadanie naraz, malutkie kroki i widoczny minutnik. To narzędzie do produktywności, nie leczenie ani diagnoza." },

@@ -101,7 +101,7 @@ export function PlansPage() {
     {
       id: "plus",
       name: "Plus",
-      price: 9000,
+      price: LEGAL.prices.plus,
       description: "",
       highlighted: true,
       trial: true,
@@ -110,7 +110,7 @@ export function PlansPage() {
     {
       id: "pro",
       name: "Pro",
-      price: 30000,
+      price: LEGAL.prices.pro,
       description: "",
       highlighted: false,
       trial: false,
@@ -185,29 +185,19 @@ export function PlansPage() {
                 <div className="mt-3 flex items-end gap-1">
                   {plan.price ? (
                     <>
+                      {/* Paddle charges in USD, so the card shows the same
+                          number and currency the checkout bills. */}
                       <span className="text-4xl font-bold">
-                        $<AnimatedNumber value={plan.price} format={(n) => n.toLocaleString("es-AR")} />
+                        US$<AnimatedNumber value={plan.price} />
                       </span>
                       <span className="mb-1 text-sm text-muted-foreground">
-                        ARS {plans.perMonth}
+                        {plans.perMonth}
                       </span>
                     </>
                   ) : (
                     <span className="text-4xl font-bold">{plans.free}</span>
                   )}
                 </div>
-
-                {/* The charge is in pesos and the store cannot be denominated in
-                    anything else, but half the people who might pay for this do
-                    not price in pesos. The reference is a second signal, not a
-                    second offer: both figures come from LEGAL.prices and
-                    PLAN_PRICES_ARS, which tests/pricing.test.ts holds together,
-                    so the two can never quote different plans. */}
-                {plan.price && plan.id !== "free" ? (
-                  <p className="mt-1 text-xs text-muted-foreground/80">
-                    ≈ US${LEGAL.prices[plan.id as "plus" | "pro"]}
-                  </p>
-                ) : null}
 
                 {plan.trial ? (
                   <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">

@@ -35,7 +35,7 @@ export function LandingContent({ initialLanguage }: { initialLanguage: AppLangua
     },
     {
       name: "Plus",
-      price: `$${LEGAL.prices.plus}`,
+      price: `US$${LEGAL.prices.plus}`,
       note: `${plansCopy.perMonth} · ${plansCopy.trialBadge(LEGAL.trialDays)}`,
       items: plansCopy.plusFeatures as readonly string[],
       cta: plansCopy.subscribePlus,
@@ -43,7 +43,7 @@ export function LandingContent({ initialLanguage }: { initialLanguage: AppLangua
     },
     {
       name: "Pro",
-      price: `$${LEGAL.prices.pro}`,
+      price: `US$${LEGAL.prices.pro}`,
       note: plansCopy.perMonth,
       items: plansCopy.proFeatures as readonly string[],
       cta: plansCopy.subscribePro,

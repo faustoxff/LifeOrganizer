@@ -32,7 +32,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Planes, precios y pagos",
         body: [
-          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios de referencia son USD ${LEGAL.prices.plus} (Plus) y USD ${LEGAL.prices.pro} (Pro) por mes. El importe final, con los impuestos que correspondan, se muestra en el checkout de Paddle antes de pagar.`,
+          `El Servicio ofrece un plan gratuito y planes pagos por suscripción mensual (Plus y Pro). Los precios son US$${LEGAL.prices.plus} (Plus) y US$${LEGAL.prices.pro} (Pro) por mes, y se cobran en dólares estadounidenses. Según tu país, el importe final puede incluir impuestos locales; se muestra en el checkout de Paddle antes de pagar.`,
           "Los pagos son procesados por Paddle, que actúa como merchant of record: cobra, liquida y presenta el impuesto correspondiente, por lo que el Responsable no almacena los datos de tu tarjeta.",
           `El plan Plus puede incluir un período de prueba gratuito de ${LEGAL.trialDays} días, por única vez por persona. Los planes y precios pueden modificarse; los cambios se comunican con anticipación y no afectan el período ya abonado.`,
           "Los límites de uso diario de las funciones de IA dependen del plan y pueden ajustarse."
@@ -106,7 +106,7 @@ export const termsContent: { es: LegalContent; en: LegalContent } = {
       {
         title: "Plans, prices and payments",
         body: [
-          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Reference prices are USD ${LEGAL.prices.plus} (Plus) and USD ${LEGAL.prices.pro} (Pro) per month. The final amount, including any applicable tax, is shown in the Paddle checkout before you pay.`,
+          `The Service offers a free plan and paid monthly subscriptions (Plus and Pro). Prices are US$${LEGAL.prices.plus} (Plus) and US$${LEGAL.prices.pro} (Pro) per month, charged in US dollars. Depending on your country, the final amount may include local taxes; it is shown in the Paddle checkout before you pay.`,
           "Payments are processed by Paddle, which acts as merchant of record: it collects the payment, settles and files the applicable tax, so the Operator does not store your card details.",
           `The Plus plan may include a free ${LEGAL.trialDays}-day trial, once per person. Plans and prices may change; changes are announced in advance and do not affect an already-paid period.`,
           "Daily usage limits for AI features depend on your plan and may be adjusted."

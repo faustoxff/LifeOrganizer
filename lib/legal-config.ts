@@ -10,7 +10,7 @@ export const LEGAL = {
   operatorAddress: "San Lorenzo 2523, B7600 Mar del Plata, Buenos Aires, Argentina",
   contactEmail: "faustozaccanti@gmail.com",
   lastUpdated: "2026-10-27",
-  // Precios de referencia (USD). Los cobros en pesos se calculan aparte.
+  // Precios en USD: Paddle cobra en dólares estadounidenses.
   prices: { plus: 6, pro: 20 },
   trialDays: 14
 } as const;
