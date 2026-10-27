@@ -15,11 +15,18 @@ const isDev = process.env.NODE_ENV !== "production";
 // for the verification step.
 const turnstile = "https://challenges.cloudflare.com https://*.challenges.cloudflare.com";
 
-// Paddle's overlay checkout. The redirect flow needed none of this; opening a
-// checkout in place does: paddle.js is served from cdn.paddle.com and it frames
-// the payment page on checkout.paddle.com. Without these the overlay renders
-// blank — a silent failure, since the page looks correct until it is opened.
-const paddle = "https://cdn.paddle.com https://checkout.paddle.com https://*.paddle.com";
+// Paddle's overlay checkout, per directive. paddle.js and its stylesheet and
+// fonts come from cdn.paddle.com, the payment page is framed from
+// buy.paddle.com / checkout.paddle.com, and the checkout talks to
+// checkout-service.paddle.com and other *.paddle.com APIs. Missing any of these
+// fails silently: the stylesheet blocked from style-src leaves the overlay
+// unstyled or blank, and the page looks correct until checkout is opened.
+const paddleScript = "https://cdn.paddle.com";
+const paddleStyle = "https://cdn.paddle.com";
+const paddleFont = "https://cdn.paddle.com";
+const paddleFrame = "https://buy.paddle.com https://checkout.paddle.com";
+const paddleConnect = "https://checkout-service.paddle.com https://*.paddle.com";
+const paddleImg = "https://*.paddle.com";
 // Origins the browser needs for Clerk's FAPI, WebSocket sessions and JS bundle.
 // A dev instance lives on *.clerk.accounts.dev; a live instance lives on
 // *.clerk.com. Both have to be allowed: with only the dev origin the app looks
@@ -32,16 +39,17 @@ const csp = [
   "default-src 'self'",
   // Next.js injects inline bootstrap scripts; Turbopack also needs eval in dev.
   // blob: is required because Clerk and Next both spin up workers from blob URLs.
-  `script-src 'self' 'unsafe-inline' blob:${isDev ? " 'unsafe-eval'" : ""} ${clerkHttp} ${turnstile} ${paddle}`,
+  `script-src 'self' 'unsafe-inline' blob:${isDev ? " 'unsafe-eval'" : ""} ${clerkHttp} ${turnstile} ${paddleScript}`,
   `worker-src 'self' blob:`,
-  `style-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  `style-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} ${paddleStyle}`,
+  // https: already covers Paddle; it is listed so the policy says what it needs.
+  `img-src 'self' data: blob: https: ${paddleImg}`,
+  `font-src 'self' data: ${paddleFont}`,
   // The AI features call Groq/Tavily from the server only, so the browser never
   // needs them; Clerk does. Paddle's checkout is an overlay loaded into the page
   // (Paddle.js plus its iframe), which is why its origins are allowed here.
-  `connect-src 'self' ${clerkHttp} ${clerkWs} ${turnstile} ${paddle}`,
-  `frame-src 'self' ${clerkHttp} ${turnstile} ${paddle}`,
+  `connect-src 'self' ${clerkHttp} ${clerkWs} ${turnstile} ${paddleConnect}`,
+  `frame-src 'self' ${clerkHttp} ${turnstile} ${paddleFrame}`,
   "frame-ancestors 'self'",
   "base-uri 'self'",
   `form-action 'self' ${clerkHttp}`,
