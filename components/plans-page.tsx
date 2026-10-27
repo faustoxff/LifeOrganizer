@@ -9,7 +9,7 @@ import { useAppLanguage } from "@/components/language-provider";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { LEGAL } from "@/lib/legal-config";
-import { usePaddleCheckout } from "@/lib/use-paddle-checkout";
+import { errorMessage, usePaddleCheckout } from "@/lib/use-paddle-checkout";
 import { useUserPlan } from "@/lib/use-user-plan";
 import { cn } from "@/lib/utils";
 
@@ -31,11 +31,22 @@ export function PlansPage() {
     router.refresh();
   });
 
+  // Debugging: shows the real cause instead of copy.errors.unexpected. Put the
+  // generic text back once checkout is confirmed working in production.
+  function reportError(where: string, err: unknown) {
+    console.error(`[plans] ${where}:`, errorMessage(err), err);
+    if (err instanceof Error && err.stack) console.error(err.stack);
+    setError(`Error: ${errorMessage(err)}`);
+  }
+
   async function handleCheckout(planId: "plus" | "pro") {
     setError("");
+    // NEXT_PUBLIC_* is inlined when the app is built, so a variable added on
+    // Vercel after the last build is still undefined here until a redeploy.
     const priceId = planId === "pro" ? process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO : process.env.NEXT_PUBLIC_PADDLE_PRICE_PLUS;
     if (!priceId) {
-      setError(copy.errors.unexpected);
+      const name = planId === "pro" ? "NEXT_PUBLIC_PADDLE_PRICE_PRO" : "NEXT_PUBLIC_PADDLE_PRICE_PLUS";
+      reportError("checkout", new Error(`${name} is not defined in this build (redeploy after setting it on Vercel)`));
       return;
     }
     setLoadingPlan(planId);
@@ -43,8 +54,8 @@ export function PlansPage() {
       // Opens Paddle's checkout over the page. Nobody leaves the app, so a
       // misclick is a closed modal rather than a lost session.
       await checkout.open({ priceId });
-    } catch {
-      setError(copy.errors.unexpected);
+    } catch (err) {
+      reportError("checkout", err);
     } finally {
       setLoadingPlan(null);
     }
@@ -73,9 +84,10 @@ export function PlansPage() {
         router.push("/app");
         return;
       }
-      throw new Error("trial_failed");
-    } catch {
-      setError(copy.errors.unexpected);
+      const body = await res.text().catch(() => "");
+      throw new Error(`trial request failed: HTTP ${res.status} ${body}`);
+    } catch (err) {
+      reportError("trial", err);
       setLoadingPlan(null);
     }
   }

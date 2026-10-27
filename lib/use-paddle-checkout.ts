@@ -27,6 +27,11 @@ const PADDLE_SCRIPT = "https://cdn.paddle.com/paddle/v2/paddle.js";
 type Paddle = PaddleNamespace;
 let paddlePromise: Promise<Paddle | null> | null = null;
 
+/** The message of anything thrown, for logs and (while debugging) the UI. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** Loads paddle.js once per page, however many components ask for it. */
 function loadPaddle(): Promise<Paddle | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
@@ -51,9 +56,16 @@ function loadPaddle(): Promise<Paddle | null> {
     script.src = PADDLE_SCRIPT;
     script.async = true;
     script.onload = () => {
-      resolve((window as unknown as { Paddle?: Paddle }).Paddle ?? null);
+      const instance = (window as unknown as { Paddle?: Paddle }).Paddle ?? null;
+      if (!instance) console.error("[paddle] paddle.js loaded but window.Paddle is undefined");
+      resolve(instance);
     };
-    script.onerror = () => resolve(null);
+    script.onerror = (event) => {
+      // Usually the CSP or an ad blocker. Cleared so a later mount can retry.
+      console.error("[paddle] failed to load paddle.js from", PADDLE_SCRIPT, event);
+      paddlePromise = null;
+      resolve(null);
+    };
     document.head.appendChild(script);
   });
 
@@ -65,21 +77,42 @@ export function usePaddleCheckout(onCompleted?: () => void): {
   ready: boolean;
 } {
   const [paddle, setPaddle] = useState<Paddle | null>(null);
+  // Why the checkout cannot open, kept so the click can report it instead of a
+  // generic "not ready". Init runs on mount, so by the time someone clicks the
+  // failure has already happened and left no trace in the network tab.
+  const [initError, setInitError] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const fail = (message: string, err?: unknown) => {
+      console.error(`[paddle] ${message}`, err ?? "");
+      if (err instanceof Error && err.stack) console.error(err.stack);
+      if (!cancelled) setInitError(message);
+    };
     void (async () => {
       const instance = await loadPaddle();
-      if (!instance || cancelled) return;
+      if (cancelled) return;
+      if (!instance) {
+        fail("paddle.js did not load (window.Paddle is undefined). Check the CSP and ad blockers.");
+        return;
+      }
 
       try {
         // Minted per session, never long-lived: it is public material and a
         // leaked one expires on its own.
         const res = await fetch("/api/paddle/client-token", { method: "POST" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          fail(`client token request failed: HTTP ${res.status} ${body}`);
+          return;
+        }
         const { token } = (await res.json()) as { token?: string };
-        if (!token || cancelled) return;
+        if (cancelled) return;
+        if (!token) {
+          fail("client token response had no token");
+          return;
+        }
 
         tokenRef.current = token;
         instance.Initialize({
@@ -92,12 +125,15 @@ export function usePaddleCheckout(onCompleted?: () => void): {
             // The event's own name lives on `type`; `data` is the payload and
             // is absent on some events, so it is not where the check goes.
             if (event.type === "checkout.completed") onCompleted?.();
+            if (event.type === "checkout.error" || event.type === "checkout.warning") {
+              console.error(`[paddle] ${event.type}`, event);
+            }
           }
         } as PaddleSetupOptions);
         if (!cancelled) setPaddle(instance);
-      } catch {
-        // Left uninitialised on purpose. The caller falls back to telling the
-        // user plainly rather than opening a checkout that cannot work.
+      } catch (err) {
+        // Left uninitialised on purpose; open() reports this message.
+        fail(`initialisation failed: ${errorMessage(err)}`, err);
       }
     })();
     return () => {
@@ -107,14 +143,19 @@ export function usePaddleCheckout(onCompleted?: () => void): {
 
   const open = useCallback(
     async ({ priceId, email }: { priceId: string; email?: string }) => {
-      if (!paddle) throw new Error("checkout_not_ready");
-      await paddle.Checkout.open({
+      if (!(window as unknown as { Paddle?: Paddle }).Paddle) {
+        throw new Error("window.Paddle is undefined: paddle.js was not loaded");
+      }
+      if (!paddle) {
+        throw new Error(initError ?? "Paddle is still initialising (client token not received yet)");
+      }
+      paddle.Checkout.open({
         items: [{ priceId, quantity: 1 }],
         settings: { displayMode: "overlay", variant: "one-page" },
         ...(email ? { customer: { email } } : {})
       });
     },
-    [paddle]
+    [paddle, initError]
   );
 
   return { open, ready: Boolean(paddle) };
@@ -140,8 +181,9 @@ export function useLocalizedPrices(): Record<string, string> {
         setPrices(
           Object.fromEntries(Object.entries(body.prices).map(([plan, v]) => [plan, v.formatted]))
         );
-      } catch {
+      } catch (err) {
         // Leave the static price on screen; it is the same number Paddle bills.
+        console.error("[paddle] price preview failed", err);
       }
     })();
     return () => {

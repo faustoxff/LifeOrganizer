@@ -29,6 +29,9 @@ export async function POST() {
     return NextResponse.json({ token });
   } catch (err) {
     console.error("Paddle client token failed", err);
-    return NextResponse.json({ error: "Failed to create checkout" }, { status: 502 });
+    // The detail is passed to the signed-in user while checkout is being
+    // debugged: Paddle's message (missing key, missing permission) is the fix.
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "Failed to create checkout", detail }, { status: 502 });
   }
 }
