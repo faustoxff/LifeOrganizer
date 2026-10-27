@@ -19,9 +19,12 @@ export function getPaddle(): Paddle {
   const apiKey = process.env.PADDLE_API_KEY;
   if (!apiKey) throw new Error("PADDLE_API_KEY is not set");
 
+  // Production only. There is no sandbox setup: its API key, prices and
+  // webhook secret are a separate catalog, and paddle.js in the browser always
+  // talks to production, so a sandbox server would mint tokens the checkout
+  // rejects.
   const options: PaddleOptions = {
-    environment:
-      (process.env.NEXT_PUBLIC_PADDLE_ENV as Environment) ?? Environment.sandbox,
+    environment: Environment.production,
     logLevel: LogLevel.error
   };
   return new Paddle(apiKey, options);
